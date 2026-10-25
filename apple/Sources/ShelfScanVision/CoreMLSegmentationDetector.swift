@@ -26,31 +26,13 @@ public final class CoreMLSegmentationDetector: Detector {
     /// pixels (448x448 for DETR). `skipLabels`: class names never reported (e.g. "person").
     public init(modelURL: URL, computeUnits: MLComputeUnits = .cpuAndNeuralEngine, minPixels: Int = 150, includeStuff: Bool = false,
                 skipLabels: Set<String> = [], score: Float = 0.9) throws {
-        let cfg = MLModelConfiguration()
-        cfg.computeUnits = computeUnits
-        let compiled = modelURL.pathExtension == "mlmodelc" ? modelURL : try Self.compiledURL(for: modelURL)
-        let ml = try MLModel(contentsOf: compiled, configuration: cfg)
+        let ml = try CoreMLLoader.load(modelURL, computeUnits: computeUnits)
         model = try VNCoreMLModel(for: ml)
         labels = Self.readLabels(ml)
         self.minPixels = minPixels
         self.includeStuff = includeStuff
         self.skip = skipLabels
         self.score = score
-    }
-
-    /// Compiling an .mlpackage takes seconds; keep the result next to the system's caches, keyed by path and mtime.
-    private static func compiledURL(for src: URL) throws -> URL {
-        let attrs = try FileManager.default.attributesOfItem(atPath: src.appendingPathComponent(src.pathExtension == "mlpackage" ? "Manifest.json" : "").path)
-        let stamp = Int((attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)
-        let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("shelfscan-coreml/\(abs(src.path.hashValue))-\(stamp)", isDirectory: true)
-        let dst = cache.appendingPathComponent(src.deletingPathExtension().lastPathComponent + ".mlmodelc")
-        if FileManager.default.fileExists(atPath: dst.path) { return dst }
-        let tmp = try MLModel.compileModel(at: src)
-        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-        try? FileManager.default.removeItem(at: dst)
-        try FileManager.default.moveItem(at: tmp, to: dst)
-        return dst
     }
 
     /// Apple's conversions keep the class names in creator metadata (`com.apple.coreml.model.preview.params`).
