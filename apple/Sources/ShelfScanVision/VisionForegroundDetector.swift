@@ -10,7 +10,13 @@ import Vision
 @available(iOS 17.0, macOS 14.0, *)
 public final class VisionForegroundDetector: Detector {
     private let minPixels: Int
-    public init(minPixels: Int = 64) { self.minPixels = minPixels }
+    private let emitMasks: Bool
+    /// `minPixels`: instances smaller than this (in mask-buffer pixels) are dropped. `emitMasks`: return the instance
+    /// masks (the engine then cuts products out onto white when `cutoutOnWhite` is set); false returns boxes only.
+    public init(minPixels: Int = 64, emitMasks: Bool = true) {
+        self.minPixels = minPixels
+        self.emitMasks = emitMasks
+    }
 
     public func detect(frame: Frame) throws -> [Detection] {
         guard let cg = frame.cgImage() else {
@@ -45,12 +51,14 @@ public final class VisionForegroundDetector: Detector {
         return boxes.compactMap { (label, b) -> Detection? in
             guard b.n >= minPixels else { return nil }
             let bw = b.x1 - b.x0 + 1, bh = b.y1 - b.y0 + 1
+            let bbox = BBox(x: Float(b.x0) / Float(w), y: Float(b.y0) / Float(h), w: Float(bw) / Float(w), h: Float(bh) / Float(h))
+            guard emitMasks else { return Detection(bbox: bbox, score: 0.9, label: "product", mask: nil) }
             var mask = Data(count: bw * bh)
             for y in 0..<bh {
                 for x in 0..<bw where px[(b.y0 + y) * rowBytes + b.x0 + x] == label { mask[y * bw + x] = 255 }
             }
             return Detection(
-                bbox: BBox(x: Float(b.x0) / Float(w), y: Float(b.y0) / Float(h), w: Float(bw) / Float(w), h: Float(bh) / Float(h)),
+                bbox: bbox,
                 score: 0.9, label: "product",
                 mask: Mask(width: UInt32(bw), height: UInt32(bh), data: mask))
         }
