@@ -12,6 +12,7 @@ struct Options {
     var masks: Bool?
     var sam = false
     var credits: Int?
+    var autoStart = false
     var describer: GuesserChoice?
     var defaults = false
     var overlayTest = false
@@ -30,6 +31,7 @@ struct Options {
             case "--no-masks": o.masks = false
             case "--sam": o.sam = true
             case "--credits": o.credits = it.next().flatMap(Int.init)
+            case "--start": o.autoStart = true   // start scanning at launch
             case "--describer":
                 switch it.next() { case "s0": o.describer = .clipS0; case "claude": o.describer = .clipClaude; default: o.describer = .clipS2 }
             case "--embedder-clip": o.embedder = it.next() == "s0" ? .mobileclipS0 : .mobileclipS2
@@ -76,7 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if CommandLine.arguments.contains("--selftest") { overlaySelfTest(); NSApplication.shared.terminate(nil) }
             return
         }
-        guard let seconds = options.measureSeconds else { return }
+        guard let seconds = options.measureSeconds else {
+            if options.autoStart { await controller.start() }
+            return
+        }
         await controller.start()
         try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
         await controller.stop()
