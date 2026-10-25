@@ -62,3 +62,18 @@ Format per entry: date, item, did, measured, blocked, next.
   rectangles) so Track gives them the Background role; would need agreement since roles are the engine's call. Not done.
   Real-object box check on screen still to do with the 1.5 items.
 * **Next:** remaining unblocked work: 1.9 design note (PROPOSE FIRST), 1.11 request-dump switch (code only, no live call).
+
+## 2026-10-25 · Detector / embedder / describer options (Matt's requests during 1.4)
+
+* **Did:** CoreML DETR semantic-segmentation detector (Apple's conversion); SAM 2.1 tiny mask refinement over any detector's
+  boxes; MobileCLIP S0/S2 embedder and zero-shot describer (research-only licence, Matt's choice); CLIP tokenizer port;
+  HybridGuesser (on-device gate + hints, Claude names products); 1.11 request dump switch; all selectable in the demo's Settings.
+  Placeholder guesser now uses a specific detector class as its noun.
+* **Measured:** `phase1-foundation-models.md`, `phase1-live-latency.md`. DETR 29.8 ms (ANE); SAM encoder 120 ms (ANE) + 7 ms/box (GPU);
+  MobileCLIP S2 6.8 ms. Full stack live p95 1246 ms with 4 frames in flight → 417 ms with 1.
+* **Decisions by Matt:** MobileCLIP despite research-only weights (recorded; SigLIP 2 is the replacement); SAM 2.1 tiny yes;
+  naming = CLIP local + Claude; may use his Anthropic key (masked crops only, dumps for audit).
+* **Blocked:** ANTHROPIC_API_KEY is not in the environment Claude Code's shell sees. Matt to put it in
+  `~/.config/shelfscan/anthropic_key` (chmod 600) or start the demo from a shell that exports it.
+* **Open:** ~450 ms UI hitch with the CLIP/SAM stack; engine build on the main thread at Apply; over-splitting of one person.
+* **Next:** first live Claude call through the demo with request dumps, audit the dumps, then 1.9 design note.
