@@ -223,7 +223,7 @@ Detailed specs with work items and acceptance tests are in `docs/`. Hand-off ent
 * CLI demo (synthetic, image folder, ffmpeg pipe) with a review loop.
 * 54 unit + 24 pipeline tests, clippy clean.
 
-**Phase 1 (Mac)**: `docs/phase-1-mac.md`. Vision plugins, live preview app, dataset, detector and embedder bake-offs, calibrated clustering, CSV import.
+**Phase 1 (Mac): CLOSED 2026-10-25 with open items** (`docs/results/phase1-report.md`: tests 1, 2, 4, 6 not run for lack of the dataset and dev store; 3 partial; 5 and 7 pass). `docs/phase-1-mac.md`. Vision plugins, live preview app, dataset, detector and embedder bake-offs, calibrated clustering, CSV import.
 **Phase 2 (iPhone app shell)**: `docs/phase-2-iphone.md`. Capture, review UI, lifecycle, Keychain, backend-proxied cloud, on-device measurements.
 **Phase 3 (live Shopify)**: `docs/phase-3-shopify-live.md`. First live drafts, images, idempotency, throughput, backend design.
 
@@ -246,13 +246,14 @@ Detailed specs with work items and acceptance tests are in `docs/`. Hand-off ent
 | `rxing` quality on webcam / phone frames | **UNVERIFIED** |
 | CLI: synthetic, image folder, review loop | ran |
 | CLI: ffmpeg pipe source reading a video **file** (Linux, with `-re`) | ran (found the one object in a generated clip) |
-| CLI: ffmpeg pipe source from a Mac webcam (`avfoundation`) | **UNVERIFIED** |
+| CLI: ffmpeg pipe source from a Mac webcam (`avfoundation`) | **UNVERIFIED** (the Mac demo uses AVFoundation directly instead) |
+| CLI `--offline` replay of a video file, `shelfscan score` | ran (synthetic clip, two runs identical) |
 | Shopify CSV headers | docs (help.shopify.com, 2026-10); parse-back test ran; **importer UNVERIFIED** |
 | Shopify `productSet` field names (`status DRAFT`, `sku`, `barcodes`, `seo`, `productOptions` max 3, `variants`, `files`, `inventoryQuantities`, `userErrors`) | docs (shopify.dev API 2026-10, 2026-10-24); request shape mock-tested; **live store UNVERIFIED** |
 | Shopify client-credentials grant (endpoint, form body, 24 h token, same-org limit) | docs (2026-10-24); mock-tested; **live UNVERIFIED** |
 | Shopify: `productSet` upsert via `identifier`; staged upload to `productSet.files`; image upload; inventory | **UNVERIFIED** (docs partial, see Phase 3) |
 | Shopify rate limits at 100 listings | **UNVERIFIED** |
-| Anthropic Messages API request shape and forced tool call | mock only; **live UNVERIFIED** |
+| Anthropic Messages API request shape and forced tool call | **requests ran live** from the Mac demo (2026-10-25, 95 calls to `/v1/messages`, model `claude-sonnet-5-5`, masked crops only, audited from `SHELFSCAN_DUMP_REQUESTS` dumps, key in 0 files); **response parsing not confirmed** (responses are not dumped; Matt has not reported the titles yet) |
 | Open Food Facts response shape | mock only; **live UNVERIFIED** |
 | Video measurements in section 8 | measured earlier (ORB / Laplacian) on one reel, no detector run |
 | Rust test suite, clippy, Python smoke on a Mac | ran (macOS 26.3.1, M3 Pro, 2026-10-25) |
@@ -260,8 +261,12 @@ Detailed specs with work items and acceptance tests are in `docs/`. Hand-off ent
 | Vision foreground-instance masks on dense racks | **UNTESTED** (Apple's page gives no instance limit) |
 | Swift ↔ Rust round trip: Engine built in Swift, Swift `EventListener`, `ItemDiscovered` for 3 synthetic products | ran (`swift test`, macOS, 2026-10-25) |
 | Vision plugins (barcode, feature print, foreground masks) on **synthetic** fixtures: EAN-13 decode, 768-d unit vectors, mask top-left origin, padded BGRA frames | ran (`swift test`, macOS; `docs/results/phase1-vision-unit.md`) |
-| Vision plugins on real photos / webcam frames | **UNTESTED** (needs the 1.5 items) |
-| `ShelfScanCapture` (CameraSource, ScanModel, OverlayView) | compiles for macOS; **behaviour UNTESTED** |
+| Vision plugins on webcam frames | foreground detector and feature print ran live (room scene, 2026-10-25); quality against a truth sheet **UNTESTED** (needs the 1.5 items); Vision barcode on a real webcam **UNTESTED** |
+| `ShelfScanCapture` (CameraSource, ScanModel, LatencyMeter) | ran live in the Mac demo (FaceTime HD Camera, 1920x1080, host-clock timestamps); the SwiftUI `OverlayView` is unused (the demo draws with layers) |
+| Mac demo overlay geometry and Boxes / Labels toggles | ran (off-screen self-test in `scripts/swift_test.sh`; caught a vertically mirrored overlay on the first live run) |
+| Flip-for-barcode flow through the engine (focus → 2 agreeing reads → `Confirmed(barcode)`), camera-format frames | ran (`BarcodeFlowTests`, Vision and rxing, debug and release) |
+| CoreML DETR (Apple, Apache-2.0), SAM 2.1 tiny (Apple, Apache-2.0), MobileCLIP S0/S2 (Apple, **research-only licence**) | ran (unit tests + live timing, `docs/results/phase1-foundation-models.md`) |
+| Detector / embedder bake-off on tabletop footage, calibrated `sku_similarity` | **NOT RUN** (no dataset) |
 | Swift package for iOS | **UNTESTED** (iOS platform not installed in Xcode on the dev Mac) |
 | eBay / Google price-access claims | secondary sources, not the vendors' docs |
 | Open Food Facts / GS1 terms | read from their pages; legal review is yours |

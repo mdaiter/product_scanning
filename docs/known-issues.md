@@ -10,6 +10,9 @@ Honest list. "Fix in" says which phase should pick it up.
   touching products and needs a plain background. It exists for CI and demos. Fix in Phase 1 (Vision foreground masks or a CoreML detector).
 * **No camera-motion compensation in Track.** Fine for tabletop with a steady phone; an aisle walk would lose tracks
   (measured on the sample reel: median camera shift 6.6% of width between analysed frames). Stretch goal.
+* **Mac demo (Phase 1):** an intermittent ~450 ms main-thread hitch with the SAM + MobileCLIP stack (undiagnosed); one object can
+  become several items; barcodes are read only while an item is focused ("Scan barcode" in the item list); a better view does
+  not re-ask the cloud for a name. MobileCLIP weights are research-only (replace with SigLIP 2 before commercial use).
 * **Similarity thresholds are placeholders** (`sku_similarity` 0.92, `fixture_similarity` 0.95, `duplicate_similarity` 0.97).
   Calibrate per embedder on labelled pairs (Phase 1). Category gate and keypoint/OCR verification (PLAN section 5, steps 2 and 4) are not built.
 * **Quantity** is the maximum number of concurrently open tracks of an item. It is an estimate; it is never written to Shopify inventory unless you opt in.
@@ -43,4 +46,4 @@ Honest list. "Fix in" says which phase should pick it up.
 ## Tests
 
 * The pipeline suite takes about 22 s. It passed 8 of 8 consecutive runs after one racy assertion was fixed; run it a few times after changes to timing-sensitive code.
-* Nothing has run on an iPhone, a Mac, or Android. The Python smoke test is the only foreign-language check that has executed.
+* Nothing has run on an iPhone or Android. On the Mac: Rust suite, Python smoke, Swift package tests and the live demo ran (see PLAN.md section 10).

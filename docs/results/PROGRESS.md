@@ -77,3 +77,13 @@ Format per entry: date, item, did, measured, blocked, next.
   `~/.config/shelfscan/anthropic_key` (chmod 600) or start the demo from a shell that exports it.
 * **Open:** ~450 ms UI hitch with the CLIP/SAM stack; engine build on the main thread at Apply; over-splitting of one person.
 * **Next:** first live Claude call through the demo with request dumps, audit the dumps, then 1.9 design note.
+
+## 2026-10-25 · Phase 1 closed (Matt's call) with open items
+
+* **Did:** barcode flow verified through the engine with camera-format frames (Vision + rxing); fixed Vision barcode cold start
+  (warm-up) and slow RGB→RGBA conversion (vImage); overlay Boxes / Labels toggles (self-tested); guided barcode UI (Scan barcode,
+  typed barcode, auto-unfocus on read); `phase1-report.md`; PLAN §10 and known-issues updated.
+* **Measured:** Rust 57 + 24 (3/3 runs) + 5 CLI; clippy clean; Python smoke OK; Swift 23 tests debug + release; self-test OK.
+* **Open (carried):** dataset and bake-offs (1.5, 1.7, 1.8), 1.9, CSV import (1.12), live webcam barcode check, ~450 ms hitch,
+  over-splitting, cloud response parsing not confirmed.
+* **Next:** Phase 2 needs the iPhone details and the iOS platform download; Phase 3.0 needs the dev store and client id / secret.
