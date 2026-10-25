@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>dev.shelfscan.macdemo</string>
+    <key>CFBundleName</key>
+    <string>ShelfScan Mac Demo</string>
+    <key>NSCameraUsageDescription</key>
+    <string>ShelfScan analyses the camera picture on this Mac to find products on the table. Nothing leaves the Mac.</string>
+</dict>
+</plist>

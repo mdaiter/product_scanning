@@ -1,4 +1,4 @@
-// UNCOMPILED SKETCH: written without a Mac or iPhone. Expect compile fixes and orientation work.
+// Compiles on macOS 26; used by apple/Examples/MacDemo. iPhone orientation work is Phase 2.
 // Add NSCameraUsageDescription to the app's Info.plist (iOS and macOS).
 import AVFoundation
 import Foundation
@@ -10,6 +10,11 @@ public final class CameraSource: NSObject, AVCaptureVideoDataOutputSampleBufferD
     private let output = AVCaptureVideoDataOutput()
     private let queue = DispatchQueue(label: "shelfscan.camera", qos: .userInitiated)
     private let engine: Engine
+    private var reportedSize = false
+    /// Called once, on the camera queue, with the size of the frames handed to the engine (boxes are normalised to it).
+    public var onFrameSize: ((Int, Int) -> Void)?
+    /// The capture device in use (on a Mac this can be the built-in camera or an iPhone via Continuity Camera).
+    public private(set) var deviceName: String?
 
     public init(engine: Engine) {
         self.engine = engine
@@ -24,6 +29,7 @@ public final class CameraSource: NSObject, AVCaptureVideoDataOutputSampleBufferD
             session.commitConfiguration()
             throw ShelfError.Io(msg: "no camera available")
         }
+        deviceName = device.localizedName
         let input = try AVCaptureDeviceInput(device: device)
         if session.canAddInput(input) { session.addInput(input) }
         output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
@@ -39,7 +45,10 @@ public final class CameraSource: NSObject, AVCaptureVideoDataOutputSampleBufferD
     public func stop() { session.stopRunning() }
 
     public func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        let seconds = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+        // Stamp on the host clock (hostClockMs()), so a listener can compute glass-to-box latency against it.
+        var pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        if let clock = session.synchronizationClock { pts = CMSyncConvertTime(pts, from: clock, to: CMClockGetHostTimeClock()) }
+        let seconds = pts.seconds
         guard seconds.isFinite else { return }
         let ms = UInt64(max(1, seconds * 1000))
         guard engine.wantsFrame(timestampMs: ms) else { return }   // free drop: no copy, camera never blocks
@@ -48,6 +57,7 @@ public final class CameraSource: NSObject, AVCaptureVideoDataOutputSampleBufferD
         defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
         guard let base = CVPixelBufferGetBaseAddress(pb) else { return }
         let stride = CVPixelBufferGetBytesPerRow(pb), w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb)
+        if !reportedSize { reportedSize = true; onFrameSize?(w, h) }
         let data = Data(bytes: base, count: stride * h)           // the one copy per admitted frame
         _ = engine.pushFrame(frame: Frame(width: UInt32(w), height: UInt32(h), format: .bgra8, data: data,
                                           stride: UInt32(stride), timestampMs: ms))

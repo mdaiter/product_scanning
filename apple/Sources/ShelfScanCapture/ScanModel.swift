@@ -1,5 +1,5 @@
-// UNCOMPILED SKETCH: written without a Mac. Expect compile fixes (Swift 6 concurrency checking in particular:
-// UniFFI's Swift 6 support is partial and async calls are not Sendable yet, see uniffi-rs issue 2448).
+// Compiles on macOS 26 (Swift 5 mode). Swift 6 strict concurrency not tried: UniFFI async calls are not Sendable yet
+// (uniffi-rs issue 2448).
 import Foundation
 import ShelfScan
 import SwiftUI
@@ -12,6 +12,8 @@ public final class ScanModel: ObservableObject {
     @Published public var summary = ScanSummary(framesIn: 0, framesDropped: 0, framesSkipped: 0, framesProcessed: 0, detections: 0, tracksPromoted: 0, items: 0)
     @Published public var log: [String] = []
     @Published public var barcodeHint: (itemId: String, hint: String)?
+    /// Called on the main actor after any event that changes the item list (discovery, quantity, state, guess, merge).
+    public var onItemsChanged: (() -> Void)?
 
     public init() {}
 
@@ -26,14 +28,33 @@ public final class ScanModel: ObservableObject {
         case .warning(let src, let msg), .error(let src, let msg): log.append("\(src): \(msg)")
         default: break
         }
+        switch e {
+        case .itemDiscovered, .itemUpdated, .itemStateChanged, .guessReady, .itemMerged, .barcodeRead, .scanFlushed: onItemsChanged?()
+        default: break
+        }
+        if log.count > 200 { log.removeFirst(log.count - 200) }
     }
 }
 
 public final class ModelListener: EventListener {
     private let model: ScanModel
+    /// Glass-to-box latency as docs/events.md defines it: measured when the listener receives the `Overlay`.
+    public let latency = LatencyMeter()
+    /// The same, measured once the main actor has applied the boxes (closer to what the eye sees).
+    public let uiLatency = LatencyMeter()
+
     public init(model: ScanModel) { self.model = model }
+
     public func onEvent(event: Event) {
-        Task { @MainActor [model] in model.apply(event) }
+        var ts: UInt64?
+        if case .overlay(_, let t, _, _) = event, t > 0 {
+            ts = t
+            latency.add(Double(hostClockMs()) - Double(t))
+        }
+        Task { @MainActor [model, uiLatency] in
+            model.apply(event)
+            if let t = ts { uiLatency.add(Double(hostClockMs()) - Double(t)) }
+        }
     }
 }
 
