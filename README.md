@@ -40,3 +40,4 @@ engine.publish(ids, CsvStorefront::new("products.csv".into(), false)).await?;
 See the document map in [`HANDOFF.md`](HANDOFF.md). Rules for contributors (human or agent): [`CLAUDE.md`](CLAUDE.md). Spec: [`PLAN.md`](PLAN.md).
 
 Licence: declared as `MIT OR Apache-2.0` in `Cargo.toml`; there are no LICENSE files yet (Matt to confirm the licence).
+# product_scanning
