@@ -6,7 +6,7 @@ import ShelfScanCapture
 import ShelfScanVision
 
 enum DetectorChoice: String, CaseIterable, Identifiable, Codable {
-    case blob = "Blob (Rust)", vision = "Vision foreground"
+    case blob = "Blob (Rust)", vision = "Vision foreground", detr = "CoreML DETR (semantic segmentation)"
     var id: String { rawValue }
 }
 
@@ -77,7 +77,7 @@ final class DemoController: ObservableObject {
             let s = settings
             let listener = ModelListener(model: model)
             let engine = try EngineBuilder(config: s.engineConfig)
-                .detector(d: s.detectorPlugin)
+                .detector(d: try s.detectorPlugin())
                 .embedder(e: s.embedder.plugin)
                 .barcodeScanner(s: s.scanner.plugin)
                 .listener(l: listener)
@@ -208,6 +208,7 @@ final class DemoController: ObservableObject {
             "latency_ms": ["p50": l.p50, "p95": l.p95, "max": l.max, "n": l.n, "rejected_clock_mismatch": listener?.latency.rejected ?? 0],
             "ui_latency_ms": ["p50": u.p50, "p95": u.p95, "max": u.max, "n": u.n],
             "ui_hitches": ["over_100ms": h.count, "worst_ms": h.worstMs],
+            "item_titles": items.map { "\($0.id) x\($0.quantity) \($0.guess.title.isEmpty ? $0.label : $0.guess.title)" },
             "stats": ["frames_in": stats.framesIn, "dropped": stats.framesDropped, "skipped": stats.framesSkipped,
                       "processed": stats.framesProcessed, "detections": stats.detections, "items": stats.items],
         ]

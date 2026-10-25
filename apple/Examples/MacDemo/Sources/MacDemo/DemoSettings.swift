@@ -1,3 +1,4 @@
+import CoreML
 import Foundation
 import ShelfScan
 import ShelfScanVision
@@ -11,6 +12,12 @@ struct DemoSettings: Codable, Equatable {
     var visionMinPixels = 64
     var blobWorkSide = 160
     var blobThreshold: Float = 30
+    var detrModelPath = DemoSettings.defaultDETRPath
+    var detrUnits = ComputeChoice.cpuAndNeuralEngine
+    var detrMinPixels = 150
+    var detrIncludeStuff = false
+    /// Comma-separated class names the DETR detector never reports (e.g. "person, tv").
+    var detrSkipLabels = ""
     var embedder = EmbedderChoice.featurePrint
     var scanner = ScannerChoice.vision
     // frames
@@ -39,10 +46,21 @@ struct DemoSettings: Codable, Equatable {
     var barcodeVotes = 2
     var guessRetries = 2
 
-    var detectorPlugin: Detector {
+    /// Repo checkout's models/ (scripts/fetch_models.sh), found relative to this source file.
+    static let defaultDETRPath = URL(fileURLWithPath: #filePath)
+        .appendingPathComponent("../../../../../../models/DETRResnet50SemanticSegmentationF16.mlpackage").standardized.path
+
+    func detectorPlugin() throws -> Detector {
         switch detector {
         case .blob: return BlobDetector.withParams(workSide: UInt32(blobWorkSide), minThreshold: blobThreshold)
         case .vision: return VisionForegroundDetector(minPixels: visionMinPixels, emitMasks: visionMasks)
+        case .detr:
+            guard FileManager.default.fileExists(atPath: detrModelPath) else {
+                throw ShelfError.InvalidInput(msg: "DETR model not found at \(detrModelPath). Run scripts/fetch_models.sh")
+            }
+            let skip = Set(detrSkipLabels.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.filter { !$0.isEmpty })
+            return try CoreMLSegmentationDetector(modelURL: URL(fileURLWithPath: detrModelPath), computeUnits: detrUnits.units,
+                                                  minPixels: detrMinPixels, includeStuff: detrIncludeStuff, skipLabels: skip)
         }
     }
 
@@ -70,16 +88,37 @@ struct DemoSettings: Codable, Equatable {
         return c
     }
 
-    var summary: String { "\(detector.rawValue)\(detector == .vision && !visionMasks ? " (no masks)" : "") / \(embedder.rawValue) / \(scanner.rawValue)" }
+    var summary: String {
+        let extra = detector == .vision && !visionMasks ? " (no masks)" : detector == .detr ? " (\(detrUnits.rawValue))" : ""
+        return "\(detector.rawValue)\(extra) / \(embedder.rawValue) / \(scanner.rawValue)"
+    }
 
     private static let key = "shelfscan.macdemo.settings"
 
+    /// Saved values over the defaults, so settings saved by an older build (fewer keys) still load.
     static func load() -> DemoSettings {
-        guard let d = UserDefaults.standard.data(forKey: key), let s = try? JSONDecoder().decode(DemoSettings.self, from: d) else { return DemoSettings() }
+        guard let saved = UserDefaults.standard.data(forKey: key),
+              let savedDict = try? JSONSerialization.jsonObject(with: saved) as? [String: Any],
+              let defaults = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(DemoSettings())) as? [String: Any],
+              let merged = try? JSONSerialization.data(withJSONObject: defaults.merging(savedDict) { _, new in new }),
+              let s = try? JSONDecoder().decode(DemoSettings.self, from: merged) else { return DemoSettings() }
         return s
     }
 
     func save() {
         if let d = try? JSONEncoder().encode(self) { UserDefaults.standard.set(d, forKey: Self.key) }
+    }
+}
+
+enum ComputeChoice: String, CaseIterable, Identifiable, Codable {
+    case cpuAndNeuralEngine = "CPU + Neural Engine", cpuAndGPU = "CPU + GPU", all = "All", cpuOnly = "CPU only"
+    var id: String { rawValue }
+    var units: MLComputeUnits {
+        switch self {
+        case .cpuAndNeuralEngine: return .cpuAndNeuralEngine
+        case .cpuAndGPU: return .cpuAndGPU
+        case .all: return .all
+        case .cpuOnly: return .cpuOnly
+        }
     }
 }

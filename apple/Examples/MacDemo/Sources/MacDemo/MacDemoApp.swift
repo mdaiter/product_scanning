@@ -20,7 +20,8 @@ struct Options {
             switch a {
             case "--measure": o.measureSeconds = it.next().flatMap(Double.init)
             case "--out": o.out = it.next() ?? o.out
-            case "--detector": o.detector = it.next() == "vision" ? .vision : .blob
+            case "--detector":
+                switch it.next() { case "vision": o.detector = .vision; case "detr": o.detector = .detr; default: o.detector = .blob }
             case "--embedder": o.embedder = it.next() == "featureprint" ? .featurePrint : .color
             case "--scanner": o.scanner = it.next() == "vision" ? .vision : .rxing
             case "--no-masks": o.masks = false

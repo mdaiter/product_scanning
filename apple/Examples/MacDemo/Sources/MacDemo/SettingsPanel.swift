@@ -14,6 +14,15 @@ struct SettingsPanel: View {
                             .help("Vision instance masks. Off: boxes only (no cut-outs, slightly faster).")
                         IntRow(label: "Min instance size (px)", value: $controller.draft.visionMinPixels, range: 0...5000, step: 16,
                                help: "Smaller Vision instances are ignored (pixels in the mask buffer).")
+                    } else if controller.draft.detector == .detr {
+                        Picker("Compute units", selection: $controller.draft.detrUnits) { ForEach(ComputeChoice.allCases) { Text($0.rawValue).tag($0) } }
+                            .help("Measured on the M3 Pro: CPU + Neural Engine 30 ms, All 65 ms, CPU + GPU 57 ms per frame.")
+                        IntRow(label: "Min region (model px)", value: $controller.draft.detrMinPixels, range: 0...5000, step: 25,
+                               help: "Regions smaller than this many pixels of the 448x448 class map are ignored.")
+                        Toggle("Include stuff classes (wall, table, floor…)", isOn: $controller.draft.detrIncludeStuff)
+                        TextField("Skip labels (comma-separated, e.g. person, tv)", text: $controller.draft.detrSkipLabels)
+                        TextField("Model path", text: $controller.draft.detrModelPath).font(.caption)
+                            .help("A .mlpackage / .mlmodel / .mlmodelc semantic-segmentation model. scripts/fetch_models.sh downloads Apple's DETR.")
                     } else {
                         IntRow(label: "Work size (px)", value: $controller.draft.blobWorkSide, range: 32...1024, step: 16,
                                help: "Long side the Blob detector analyses at. Larger finds smaller objects, costs more.")
