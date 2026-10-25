@@ -17,7 +17,15 @@ pub struct BlobDetector {
 impl BlobDetector {
     #[uniffi::constructor]
     pub fn new() -> std::sync::Arc<Self> {
-        std::sync::Arc::new(Self { work_side: 160, min_threshold: 30.0 })
+        std::sync::Arc::new(Self::default())
+    }
+
+    /// Tunable variant (e.g. from a settings screen). `work_side`: long side in pixels the frame is analysed at
+    /// (clamped to 32..=1024); `min_threshold`: smallest colour difference from the border-median background that
+    /// counts as foreground (clamped to 1..=255).
+    #[uniffi::constructor]
+    pub fn with_params(work_side: u32, min_threshold: f32) -> std::sync::Arc<Self> {
+        std::sync::Arc::new(Self { work_side: work_side.clamp(32, 1024), min_threshold: min_threshold.clamp(1.0, 255.0) })
     }
 }
 
@@ -165,6 +173,16 @@ mod tests {
     fn detect(scene: &Scene, noise: u8) -> Vec<Detection> {
         let img = scene.render((0.0, 0.0), noise, &mut Lcg::new(3));
         BlobDetector::default().detect(crate::imaging::rgb_to_frame(&img, 0)).unwrap()
+    }
+
+    #[test]
+    fn with_params_clamps_and_still_detects() {
+        let d = BlobDetector::with_params(5, 1000.0);
+        assert_eq!((d.work_side, d.min_threshold), (32, 255.0));
+        let scene = Scene::three_products();
+        let img = scene.render((0.0, 0.0), 0, &mut crate::synthetic::Lcg::new(1));
+        let dets = BlobDetector::with_params(240, 30.0).detect(crate::imaging::rgb_to_frame(&img, 0)).unwrap();
+        assert_eq!(dets.len(), 3);
     }
 
     #[test]
