@@ -60,6 +60,7 @@ final class DemoController: ObservableObject {
 
     init() {
         model.onItemsChanged = { [weak self] in self?.scheduleRefresh() }
+        model.onBarcodeRead = { [weak self] id, gtin in self?.barcodeRead(id, gtin) }
     }
 
     var pluginSummary: String { settings.summary }
@@ -183,6 +184,29 @@ final class DemoController: ObservableObject {
         act("focus") { engine in
             if engine.focusedItem() == id { try await engine.clearFocus() } else { try await engine.focusItem(itemId: id) }
         }
+    }
+
+    /// Focus the item so the engine reads barcodes for it (reads are bound to the focused item), and tell the user what to do.
+    func scanBarcode(_ id: String) {
+        act("scan barcode") { [weak self] engine in
+            try await engine.focusItem(itemId: id)
+            await MainActor.run { self?.status = "Hold the barcode of \(id) up to the camera" }
+        }
+    }
+
+    func stopBarcode() { act("stop") { try await $0.clearFocus() } }
+
+    func typeBarcode(_ id: String, _ digits: String) {
+        act("barcode") { [weak self] engine in
+            let item = try await engine.submitBarcode(itemId: id, text: digits)
+            await MainActor.run { self?.status = "\(id): barcode \(item.gtin ?? digits) accepted" }
+        }
+    }
+
+    private func barcodeRead(_ id: String, _ gtin: String) {
+        status = "Barcode \(gtin) read for \(id)"
+        if focused == id { stopBarcode() }   // done with this item; the next one is the user's choice
+        scheduleRefresh()
     }
 
     func draftListings() {

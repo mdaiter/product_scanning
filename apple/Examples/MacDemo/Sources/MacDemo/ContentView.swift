@@ -7,20 +7,35 @@ struct ContentView: View {
     @ObservedObject var controller: DemoController
     @ObservedObject var model: ScanModel
     @State private var panel = Panel.items
+    @AppStorage("showBoxes") private var showBoxes = true
+    @AppStorage("showLabels") private var showLabels = true
     enum Panel { case items, settings }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 ZStack(alignment: .topLeading) {
-                    PreviewView(session: controller.session, frameSize: controller.frameSize, boxes: model.boxes)
-                    if model.hiddenCount > 0 {
-                        Text("\(model.hiddenCount) hidden").font(.caption).padding(4).background(.black.opacity(0.6)).foregroundColor(.white).padding(8)
-                    }
-                    if let hint = model.barcodeHint {
-                        Text("Show the barcode of \(hint.itemId): \(hint.hint)").font(.callout).padding(6)
-                            .background(.orange.opacity(0.85)).foregroundColor(.black).padding(.top, 32).padding(.leading, 8)
-                    }
+                    PreviewView(session: controller.session, frameSize: controller.frameSize, boxes: model.boxes,
+                                showBoxes: showBoxes, showLabels: showLabels)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Toggle("Boxes", isOn: $showBoxes).keyboardShortcut("b", modifiers: .command).help("Show / hide boxes (⌘B)")
+                            Toggle("Labels", isOn: $showLabels).keyboardShortcut("l", modifiers: .command).help("Show / hide labels (⌘L)")
+                                .disabled(!showBoxes)
+                            if model.hiddenCount > 0 {
+                                Text("\(model.hiddenCount) hidden").font(.caption).padding(4).background(.black.opacity(0.6)).foregroundColor(.white)
+                            }
+                        }.toggleStyle(.button).controlSize(.small)
+                        if let id = controller.focused {
+                            HStack {
+                                Text("Scanning barcode for \(title(id)): hold the barcode up to the camera").font(.callout)
+                                Button("Stop") { controller.stopBarcode() }
+                            }.padding(6).background(.yellow.opacity(0.9)).foregroundColor(.black)
+                        } else if let hint = model.barcodeHint {
+                            Text("\(title(hint.itemId)) needs a barcode: press \"Scan barcode\" on it in the list, then show the barcode")
+                                .font(.callout).padding(6).background(.orange.opacity(0.85)).foregroundColor(.black)
+                        }
+                    }.padding(8)
                 }
                 Divider()
                 VStack(spacing: 0) {
@@ -39,12 +54,19 @@ struct ContentView: View {
             StatsStrip(controller: controller)
         }
     }
+
+    private func title(_ id: String) -> String {
+        guard let i = controller.items.first(where: { $0.id == id }) else { return id }
+        return i.guess.title.isEmpty ? id : "\"\(i.guess.title)\" (\(id))"
+    }
 }
 
 struct ItemList: View {
     @ObservedObject var controller: DemoController
     @State private var editing: String?
     @State private var title = ""
+    @State private var barcodeFor: String?
+    @State private var digits = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -76,8 +98,23 @@ struct ItemList: View {
                         Button("✗") { controller.reject(item.id, title: nil) }.help("Reject: try another guess")
                         Button("Title…") { editing = item.id; title = "" }
                         Button("Hide") { controller.hide(item.id) }.help("Exclude this and everything like it")
-                        Button(controller.focused == item.id ? "Unfocus" : "Focus") { controller.focus(item.id) }
                     }.buttonStyle(.bordered).controlSize(.small)
+                    HStack(spacing: 4) {
+                        if controller.focused == item.id {
+                            Button("Stop scanning") { controller.stopBarcode() }
+                        } else {
+                            Button("Scan barcode") { controller.scanBarcode(item.id) }
+                                .help("Focus this item, then hold its barcode up to the camera")
+                                .disabled(!controller.running || item.gtin != nil)
+                        }
+                        Button("Barcode…") { barcodeFor = item.id; digits = "" }.help("Type the barcode digits")
+                    }.buttonStyle(.bordered).controlSize(.small)
+                    if barcodeFor == item.id {
+                        HStack {
+                            TextField("Barcode digits (EAN / UPC)", text: $digits).onSubmit { submitBarcode(item.id) }
+                            Button("OK") { submitBarcode(item.id) }
+                        }
+                    }
                     if editing == item.id {
                         HStack {
                             TextField("Correct title", text: $title).onSubmit { submit(item.id) }
@@ -87,6 +124,12 @@ struct ItemList: View {
                 }.padding(.vertical, 2)
             }
         }
+    }
+
+    private func submitBarcode(_ id: String) {
+        let d = digits.filter(\.isNumber)
+        if !d.isEmpty { controller.typeBarcode(id, d) }
+        barcodeFor = nil
     }
 
     private func submit(_ id: String) {

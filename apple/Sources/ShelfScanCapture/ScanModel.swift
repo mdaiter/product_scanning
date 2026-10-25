@@ -14,6 +14,8 @@ public final class ScanModel: ObservableObject {
     @Published public var barcodeHint: (itemId: String, hint: String)?
     /// Called on the main actor after any event that changes the item list (discovery, quantity, state, guess, merge).
     public var onItemsChanged: (() -> Void)?
+    /// Called on the main actor when a validated GTIN was read for an item (two agreeing frames).
+    public var onBarcodeRead: ((_ itemId: String, _ gtin: String) -> Void)?
 
     public init() {}
 
@@ -22,7 +24,10 @@ public final class ScanModel: ObservableObject {
         case .overlay(_, _, let b, let hidden): boxes = b; hiddenCount = hidden
         case .stats(let s, _): summary = s
         case .barcodeRequested(let id, let hint): barcodeHint = (id, hint)
-        case .barcodeRead(let id, let gtin): log.append("barcode \(gtin) for \(id)"); if barcodeHint?.itemId == id { barcodeHint = nil }
+        case .barcodeRead(let id, let gtin):
+            log.append("barcode \(gtin) for \(id)")
+            if barcodeHint?.itemId == id { barcodeHint = nil }
+            onBarcodeRead?(id, gtin)
         case .guessReady(let id, let title, _): log.append("\(id): \(title)")
         case .itemDiscovered(let id, _): log.append("found \(id)")
         case .warning(let src, let msg), .error(let src, let msg): log.append("\(src): \(msg)")

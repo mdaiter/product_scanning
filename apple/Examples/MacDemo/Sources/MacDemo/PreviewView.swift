@@ -10,13 +10,19 @@ struct PreviewView: NSViewRepresentable {
     let session: AVCaptureSession?
     let frameSize: CGSize
     let boxes: [OverlayBox]
+    var showBoxes = true
+    var showLabels = true
 
     func makeNSView(context: Context) -> PreviewNSView { PreviewNSView() }
 
-    func updateNSView(_ view: PreviewNSView, context: Context) {
+    func updateNSView(_ view: PreviewNSView, context: Context) { apply(to: view) }
+
+    /// What SwiftUI's update does; separate so the self-test can drive it without a SwiftUI context.
+    func apply(to view: PreviewNSView) {
         view.setSession(session)
         view.frameSize = frameSize
-        view.boxes = boxes
+        view.showLabels = showLabels
+        view.boxes = showBoxes ? boxes : []
     }
 }
 
@@ -25,6 +31,8 @@ final class PreviewNSView: NSView {
     private let overlay = CALayer()
     var frameSize = CGSize(width: 16, height: 9) { didSet { if frameSize != oldValue { needsLayout = true } } }
     var boxes: [OverlayBox] = [] { didSet { drawBoxes() } }
+    var showLabels = true
+    var overlayLayerCount: Int { overlay.sublayers?.count ?? 0 }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -79,6 +87,7 @@ final class PreviewNSView: NSView {
             shape.lineWidth = b.focused ? 3 : 2
             shape.strokeColor = color(b).cgColor
             overlay.addSublayer(shape)
+            guard showLabels, !b.label.isEmpty else { continue }
             let text = CATextLayer()
             text.string = b.label
             text.fontSize = 11

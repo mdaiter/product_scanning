@@ -132,7 +132,18 @@ func overlaySelfTest() {
     let scale = Double(rep.pixelsWide) / 1600
     print(String(format: "SELFTEST yellow box (view points, top-left origin): x %.0f...%.0f  y %.0f...%.0f   expected x 80...560  y 95...275",
                  Double(x0) / scale, Double(x1) / scale, Double(y0) / scale, Double(y1) / scale))
-    let ok = abs(Double(x0) / scale - 80) < 8 && abs(Double(y0) / scale - 95) < 8 && abs(Double(y1) / scale - 275) < 8
-    print(ok ? "SELFTEST OK" : "SELFTEST FAILED: overlay boxes are misplaced")
+    let placed = abs(Double(x0) / scale - 80) < 8 && abs(Double(y0) / scale - 95) < 8 && abs(Double(y1) / scale - 275) < 8
+    // toggles: the overlay holds one shape + one label per box; labels off leaves the shape; boxes off leaves nothing
+    let box = OverlayBox(trackId: 1, bbox: BBox(x: 0.05, y: 0.05, w: 0.30, h: 0.20), itemId: nil, state: nil,
+                         role: .product, label: "label", needsBarcode: false, focused: true)
+    func layers(boxes: Bool, labels: Bool) -> Int {
+        let p = PreviewView(session: nil, frameSize: CGSize(width: 1920, height: 1080), boxes: [box], showBoxes: boxes, showLabels: labels)
+        p.apply(to: v)
+        return v.overlayLayerCount
+    }
+    let counts = (layers(boxes: true, labels: true), layers(boxes: true, labels: false), layers(boxes: false, labels: true))
+    print("SELFTEST overlay layers (boxes+labels, boxes only, off): \(counts)")
+    let ok = placed && counts == (2, 1, 0)
+    print(ok ? "SELFTEST OK" : "SELFTEST FAILED: overlay boxes are misplaced or the toggles do not work")
     if !ok { exit(1) }
 }
