@@ -1,4 +1,5 @@
 // Compiles on macOS 26 / Xcode 26; unit-tested on synthetic fixtures only (docs/results/phase1-vision-unit.md).
+import Accelerate
 import CoreGraphics
 import Foundation
 import ShelfScan
@@ -18,18 +19,19 @@ extension Frame {
             rowBytes = stride == 0 ? w * 4 : Int(stride)
             info = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue)
         case .rgb8:
+            // vImage (vectorised): a per-pixel Swift loop took hundreds of ms per 1280x720 frame in debug builds,
+            // which starved the barcode path (the engine hands plugins RGB frames).
             let src = stride == 0 ? w * 3 : Int(stride)
             var out = Data(count: w * h * 4)
-            data.withUnsafeBytes { (s: UnsafeRawBufferPointer) in
+            let ok: Bool = data.withUnsafeBytes { (s: UnsafeRawBufferPointer) in
                 out.withUnsafeMutableBytes { (d: UnsafeMutableRawBufferPointer) in
-                    for y in 0..<h {
-                        for x in 0..<w {
-                            let si = y * src + x * 3, di = (y * w + x) * 4
-                            d[di] = s[si]; d[di + 1] = s[si + 1]; d[di + 2] = s[si + 2]; d[di + 3] = 255
-                        }
-                    }
+                    var sb = vImage_Buffer(data: UnsafeMutableRawPointer(mutating: s.baseAddress!), height: vImagePixelCount(h),
+                                           width: vImagePixelCount(w), rowBytes: src)
+                    var db = vImage_Buffer(data: d.baseAddress!, height: vImagePixelCount(h), width: vImagePixelCount(w), rowBytes: w * 4)
+                    return vImageConvert_RGB888toRGBA8888(&sb, nil, 255, &db, false, vImage_Flags(kvImageNoFlags)) == kvImageNoError
                 }
             }
+            guard ok else { return nil }
             pixels = out
             rowBytes = w * 4
             info = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue)
