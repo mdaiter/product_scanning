@@ -127,7 +127,19 @@ final class HybridGuesserTests: XCTestCase {
         XCTAssertEqual(g.title, "Acme Barcode Card")
         XCTAssertEqual(cloud.requests.count, 1)
         XCTAssertTrue(cloud.requests[0].detectorLabel.contains("barcode"), cloud.requests[0].detectorLabel)
+        XCTAssertTrue(cloud.requests[0].detectorLabel.hasPrefix("product; an on-device image model suggests: barcode"), "confident hint passed")
         XCTAssertTrue(g.attributes.contains { $0.name == "On-device guess" })
+        // a crop too small to read stays local
+        let tiny = GuessRequest(itemId: "item-002", image: try Fixtures.frame(XCTUnwrap(Fixtures.cgImage("ean13.png").cropping(to: CGRect(x: 0, y: 0, width: 200, height: 40)))),
+                                extraViews: [], detectorLabel: "toothbrush", dominantColors: [], excludedTitles: [], mode: .barcodeFirst)
+        let small = try h.guess(request: tiny)
+        XCTAssertEqual(cloud.requests.count, 1, "tiny crop must not be sent")
+        XCTAssertTrue(small.attributes.contains { $0.value.contains("too small") })
+        // a weak on-device guess is not passed as a hint, and the detector class never is
+        let unsure = HybridGuesser(local: try CLIPZeroShotGuesser(clip: clip, vocabulary: ["barcode", "barcode label", "price tag", "receipt"]), cloud: cloud, hintMin: 0.99)
+        _ = try unsure.guess(request: GuessRequest(itemId: "item-003", image: try Fixtures.frame("ean13.png"), extraViews: [], detectorLabel: "toothbrush",
+                                                   dominantColors: [], excludedTitles: [], mode: .barcodeFirst))
+        XCTAssertEqual(cloud.requests.last?.detectorLabel, "product")
         cloud.fail = true
         let f = try h.guess(request: req)
         XCTAssertEqual(f.title, "Barcode")
@@ -160,12 +172,15 @@ final class SAM2Tests: XCTestCase {
             let r = try sam.mask(enc, box: loose)
             let decMs = Date().timeIntervalSince(t1) * 1000
             let d = try XCTUnwrap(SAMRefinedDetector.detection(from: r.logits, side: r.side, within: loose,
-                                                               like: Detection(bbox: loose, score: 0.9, label: t.name, mask: nil)))
+                                                               like: Detection(bbox: loose, score: 0.9, label: t.name, mask: nil),
+                                                               frameWidth: img.width, frameHeight: img.height))
             let fill = Float(d.mask!.data.filter { $0 == 255 }.count) / Float(d.mask!.data.count)
             print(String(format: "SAM %@ iou=%.3f (loose box %.3f) score=%.2f fill=%.2f encode_ms=%.0f decode_ms=%.1f",
                          t.name, iou(d.bbox, t.box), iou(loose, t.box), r.score, fill, encMs, decMs))
             XCTAssertGreaterThan(iou(d.bbox, t.box), 0.85, t.name)
             XCTAssertGreaterThan(fill, 0.85, "\(t.name): a solid rectangle should fill its mask")
+            // the mask is at frame resolution now, not SAM's 256 grid
+            XCTAssertEqual(Float(d.mask!.width), d.bbox.w * Float(img.width), accuracy: 2, t.name)
         }
     }
 

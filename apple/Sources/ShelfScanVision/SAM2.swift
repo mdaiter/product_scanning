@@ -96,7 +96,8 @@ public final class SAMRefinedDetector: Detector {
         var out = proposals
         for i in order.prefix(maxPrompts) {
             let m = try sam.mask(enc, box: proposals[i].bbox)
-            if m.score >= minQuality, let refined = Self.detection(from: m.logits, side: m.side, within: proposals[i].bbox, like: proposals[i]) {
+            if m.score >= minQuality, let refined = Self.detection(from: m.logits, side: m.side, within: proposals[i].bbox, like: proposals[i],
+                                                                         frameWidth: Int(frame.width), frameHeight: Int(frame.height)) {
                 out[i] = refined
             }
         }
@@ -104,21 +105,45 @@ public final class SAMRefinedDetector: Detector {
     }
 
     /// Mask pixels (logit > 0) inside the prompt box grown by 10 %, so a stray region elsewhere in the frame is ignored.
-    static func detection(from logits: [Float], side: Int, within box: BBox, like d: Detection) -> Detection? {
+    /// SAM's logits are a 256x256 grid over the whole frame; they are sampled bilinearly at the frame's own resolution
+    /// (capped at `maxSide` px for the grown box) so the cut-out edge is smooth instead of 256-grid blocks, and the box is
+    /// as tight as the frame allows.
+    static func detection(from logits: [Float], side: Int, within box: BBox, like d: Detection,
+                          frameWidth: Int, frameHeight: Int, maxSide: Int = 640) -> Detection? {
         let g: Float = 0.1
-        let gx0 = max(0, Int(((box.x - box.w * g) * Float(side)).rounded(.down)))
-        let gy0 = max(0, Int(((box.y - box.h * g) * Float(side)).rounded(.down)))
-        let gx1 = min(side - 1, Int(((box.x + box.w * (1 + g)) * Float(side)).rounded(.up)))
-        let gy1 = min(side - 1, Int(((box.y + box.h * (1 + g)) * Float(side)).rounded(.up)))
-        guard gx1 > gx0, gy1 > gy0 else { return nil }
-        var x0 = side, y0 = side, x1 = -1, y1 = -1
-        for y in gy0...gy1 { for x in gx0...gx1 where logits[y * side + x] > 0 { x0 = min(x0, x); x1 = max(x1, x); y0 = min(y0, y); y1 = max(y1, y) } }
+        let rx0 = max(0, box.x - box.w * g), ry0 = max(0, box.y - box.h * g)
+        let rx1 = min(1, box.x + box.w * (1 + g)), ry1 = min(1, box.y + box.h * (1 + g))
+        guard rx1 > rx0, ry1 > ry0 else { return nil }
+        let pw = (rx1 - rx0) * Float(frameWidth), ph = (ry1 - ry0) * Float(frameHeight)
+        let scale = min(1, Float(maxSide) / max(pw, ph))
+        let w = max(1, Int((pw * scale).rounded())), h = max(1, Int((ph * scale).rounded()))
+        let f = Float(side)
+        func logit(_ u: Float, _ v: Float) -> Float {   // u, v normalised frame coordinates
+            let gx = min(max(u * f - 0.5, 0), f - 1), gy = min(max(v * f - 0.5, 0), f - 1)
+            let x0 = Int(gx), y0 = Int(gy), x1 = min(x0 + 1, side - 1), y1 = min(y0 + 1, side - 1)
+            let tx = gx - Float(x0), ty = gy - Float(y0)
+            let top = logits[y0 * side + x0] * (1 - tx) + logits[y0 * side + x1] * tx
+            let bottom = logits[y1 * side + x0] * (1 - tx) + logits[y1 * side + x1] * tx
+            return top * (1 - ty) + bottom * ty
+        }
+        var on = [Bool](repeating: false, count: w * h)
+        var x0 = w, y0 = h, x1 = -1, y1 = -1
+        for y in 0..<h {
+            let v = ry0 + (Float(y) + 0.5) / Float(h) * (ry1 - ry0)
+            for x in 0..<w {
+                let u = rx0 + (Float(x) + 0.5) / Float(w) * (rx1 - rx0)
+                if logit(u, v) > 0 {
+                    on[y * w + x] = true
+                    x0 = min(x0, x); x1 = max(x1, x); y0 = min(y0, y); y1 = max(y1, y)
+                }
+            }
+        }
         guard x1 >= x0, y1 >= y0 else { return nil }
         let bw = x1 - x0 + 1, bh = y1 - y0 + 1
         var mask = Data(count: bw * bh)
-        for y in 0..<bh { for x in 0..<bw where logits[(y0 + y) * side + x0 + x] > 0 { mask[y * bw + x] = 255 } }
-        let f = Float(side)
-        return Detection(bbox: BBox(x: Float(x0) / f, y: Float(y0) / f, w: Float(bw) / f, h: Float(bh) / f), score: d.score, label: d.label,
-                         mask: Mask(width: UInt32(bw), height: UInt32(bh), data: mask))
+        for y in 0..<bh { for x in 0..<bw where on[(y0 + y) * w + x0 + x] { mask[y * bw + x] = 255 } }
+        let sx = (rx1 - rx0) / Float(w), sy = (ry1 - ry0) / Float(h)
+        return Detection(bbox: BBox(x: rx0 + Float(x0) * sx, y: ry0 + Float(y0) * sy, w: Float(bw) * sx, h: Float(bh) * sy),
+                         score: d.score, label: d.label, mask: Mask(width: UInt32(bw), height: UInt32(bh), data: mask))
     }
 }

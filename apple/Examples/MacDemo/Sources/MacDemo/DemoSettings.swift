@@ -33,7 +33,7 @@ struct DemoSettings: Codable, Equatable {
     var scanner = ScannerChoice.vision
     // frames
     var analysisFps: Float = 10
-    var analysisMaxSide = 960
+    var analysisMaxSide = 1920   // crops are cut from the analysis frame; DETR / SAM resize to their own input anyway
     var noveltyThreshold: Float = 0.6
     var blurGateRatio: Float = 0.25
     /// Frames in flight. Latency is roughly credits x per-frame cost once the pipeline is saturated.
