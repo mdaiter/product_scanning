@@ -34,3 +34,15 @@ Format per entry: date, item, did, measured, blocked, next.
   Feature print 768-d, same/different synthetic product cosine 0.949 / 0.858. Foreground IoU ≥ 0.946, mask top-left origin confirmed.
 * **Blocked:** "5 real photos of barcodes" and detector on real frames need real items (1.5).
 * **Next:** 1.6 (replay + eval), then 1.4 (Mac demo app).
+
+## 2026-10-25 · 1.6 Deterministic replay + scoring
+
+* **Did:** `--offline` for ffmpeg file sources (ffmpeg resamples to `analysis_fps`, timestamps from the frame index, wait for a credit instead of dropping;
+  novelty / blur gates stay as live). `shelfscan score --run DIR --truth truth.json [--labels]` and `--truth` on a scan: labels tie items to truth
+  names (auto from GTIN; otherwise asked on the terminal with the crop path, saved to `labels.json`); reports SKUs found, false merges (and same-colour merges),
+  false splits, not-products, truth items only hidden, quantity exact; writes `eval.json`. The scorer reads a minimal item shape so a Swift replay tool can feed it.
+* **Measured** (synthetic 10 s clip made from the fixture scene, 480x360): offline 60 frames in, 0 dropped, 17 novelty skips, 43 processed, 3/3 SKUs,
+  **two runs identical**; live `-re` replay of the same clip processed 33. Score with labels: 3/3 found, 0 merges, 0 splits, quantity 3/3.
+  Non-interactive scoring without labels fails with the list of unlabelled items (by design). Interactive labelling: not exercised (needs a TTY).
+* **Blocked:** real footage (1.5).
+* **Next:** 1.4 Mac demo app.

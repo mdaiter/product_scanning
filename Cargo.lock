@@ -1543,6 +1543,7 @@ dependencies = [
  "anyhow",
  "clap",
  "image",
+ "serde",
  "serde_json",
  "shelfscan",
  "tokio",

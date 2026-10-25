@@ -5,6 +5,8 @@
 //! shelfscan --source images --input ./photos --review
 //! shelfscan --source ffmpeg --input-format avfoundation --input 0 --seconds 30 --review   # Mac webcam (UNVERIFIED)
 //! shelfscan fixtures --out fixtures/                                                      # test PNGs for Swift / Kotlin
+//! shelfscan --source ffmpeg --input a.mov --offline --truth data/tabletop/truth.json --out runs/a   # replay + score
+//! shelfscan score --run runs/a --truth data/tabletop/truth.json                            # score a run folder
 //! ```
 //! Cloud is opt-in: `--anthropic` (reads ANTHROPIC_API_KEY), `--off-contact you@example.com`,
 //! `--shopify-shop my-store` (reads SHOPIFY_ADMIN_TOKEN, or SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET; creates DRAFT products only).
@@ -21,6 +23,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use shelfscan::*;
 
+mod eval;
 mod fixtures;
 
 #[derive(Copy, Clone, ValueEnum)]
@@ -48,6 +51,16 @@ enum Cmd {
         #[arg(long, default_value = "fixtures")]
         out: PathBuf,
     },
+    /// Score a run folder (catalog.json + crops/) against a truth sheet; asks for missing labels on the terminal.
+    Score {
+        #[arg(long)]
+        run: PathBuf,
+        #[arg(long)]
+        truth: PathBuf,
+        /// Item id -> truth names. Default: RUN/labels.json (created on first use).
+        #[arg(long)]
+        labels: Option<PathBuf>,
+    },
 }
 
 #[derive(Parser)]
@@ -74,6 +87,16 @@ struct Args {
     /// How long to record from ffmpeg.
     #[arg(long, default_value_t = 20)]
     seconds: u32,
+    /// Replay a video file deterministically: every analysis frame is processed (wait for a credit instead of dropping),
+    /// timestamps come from the video, not the wall clock. ffmpeg file sources only.
+    #[arg(long)]
+    offline: bool,
+    /// After the scan, score the result against this truth sheet (see `shelfscan score`).
+    #[arg(long)]
+    truth: Option<PathBuf>,
+    /// Labels file for --truth (default OUT/labels.json).
+    #[arg(long)]
+    labels: Option<PathBuf>,
     /// Times each photo is shown to the tracker (a track needs a few sightings to become a product).
     #[arg(long, default_value_t = 3)]
     repeat: u32,
@@ -165,21 +188,27 @@ fn run_images(engine: &Engine, dir: &Path, fps: f32, repeat: u32) -> Result<()> 
 fn run_ffmpeg(engine: &Engine, a: &Args) -> Result<()> {
     let input = a.input.clone().context("--input is required with --source ffmpeg")?;
     let (w, h) = a.size.split_once('x').and_then(|(w, h)| Some((w.parse::<u32>().ok()?, h.parse::<u32>().ok()?))).context("--size must look like 640x360")?;
+    if a.offline && a.input_format.is_some() {
+        bail!("--offline replays a file; it cannot be used with --input-format (a live device)");
+    }
     let mut cmd = Command::new("ffmpeg");
     cmd.args(["-hide_banner", "-loglevel", "error"]);
     if let Some(f) = &a.input_format {
         cmd.args(["-f", f]);
-    } else {
+    } else if !a.offline {
         // a file would otherwise be decoded far faster than real time, and our timestamps come from the wall clock
         cmd.arg("-re");
     }
     cmd.args(&a.input_args);
-    cmd.args(["-i", &input, "-t", &a.seconds.to_string(), "-vf", &format!("scale={w}:{h}"), "-pix_fmt", "rgb24", "-f", "rawvideo", "-"]);
+    // offline: ffmpeg resamples to the analysis rate, so each delivered frame is one analysis frame
+    let vf = if a.offline { format!("fps={},scale={w}:{h}", a.fps) } else { format!("scale={w}:{h}") };
+    cmd.args(["-i", &input, "-t", &a.seconds.to_string(), "-vf", &vf, "-pix_fmt", "rgb24", "-f", "rawvideo", "-"]);
     let mut child = cmd.stdout(Stdio::piped()).spawn().context("could not start ffmpeg (is it installed and on PATH?)")?;
     let mut out = child.stdout.take().context("no ffmpeg stdout")?;
     let size = (w * h * 3) as usize;
     let mut buf = vec![0u8; size];
     let t0 = Instant::now();
+    let step = (1000.0 / a.fps.max(0.1)) as u64;
     let mut n = 0u64;
     loop {
         match out.read_exact(&mut buf) {
@@ -187,8 +216,12 @@ fn run_ffmpeg(engine: &Engine, a: &Args) -> Result<()> {
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
             Err(e) => return Err(e.into()),
         }
-        let ts = 1 + t0.elapsed().as_millis() as u64;
         n += 1;
+        if a.offline {
+            feed(engine, Frame { width: w, height: h, format: PixelFormat::Rgb8, data: buf.clone(), stride: 0, timestamp_ms: 1000 + (n - 1) * step }, true);
+            continue;
+        }
+        let ts = 1 + t0.elapsed().as_millis() as u64;
         // live source: never block the camera; the engine drops what it cannot take
         if engine.wants_frame(ts) {
             engine.push_frame(Frame { width: w, height: h, format: PixelFormat::Rgb8, data: buf.clone(), stride: 0, timestamp_ms: ts });
@@ -275,8 +308,10 @@ async fn review(engine: &Engine) -> Result<()> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    if let Some(Cmd::Fixtures { out }) = &args.command {
-        return fixtures::write(out);
+    match &args.command {
+        Some(Cmd::Fixtures { out }) => return fixtures::write(out),
+        Some(Cmd::Score { run, truth, labels }) => return eval::run(run, truth, labels.as_deref()).map(|_| ()),
+        None => {}
     }
     std::fs::create_dir_all(args.out.join("crops"))?;
 
@@ -361,6 +396,11 @@ async fn main() -> Result<()> {
 
     std::fs::write(args.out.join("catalog.json"), serde_json::to_string_pretty(&engine.catalog(true).await?)?)?;
     eprintln!("catalog.json and crops/ are in {}", args.out.display());
+    let summary = engine.stats();
+    eprintln!("frames in {}, dropped {}, skipped {}, processed {}", summary.frames_in, summary.frames_dropped, summary.frames_skipped, summary.frames_processed);
     engine.shutdown();
+    if let Some(truth) = &args.truth {
+        eval::run(&args.out, truth, args.labels.as_deref())?;
+    }
     Ok(())
 }
