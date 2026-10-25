@@ -1,5 +1,6 @@
 // swift-tools-version:5.9
-// UNVERIFIED: not built yet. Run scripts/build_xcframework.sh first (it creates build/ and Sources/ShelfScan/shelfscan.swift).
+// Built on macOS 26 / Xcode 26 (2026-10-25). Run scripts/build_xcframework.sh first (it creates build/ and Sources/ShelfScan/shelfscan.swift),
+// and `shelfscan fixtures --out apple/Tests/ShelfScanTests/Fixtures` before `swift test` (scripts/swift_test.sh does both).
 import PackageDescription
 
 let package = Package(
@@ -19,5 +20,8 @@ let package = Package(
         .target(name: "ShelfScanVision", dependencies: ["ShelfScan"], path: "Sources/ShelfScanVision"),
         // AVFoundation camera source + SwiftUI overlay model. UNCOMPILED SKETCHES.
         .target(name: "ShelfScanCapture", dependencies: ["ShelfScan"], path: "Sources/ShelfScanCapture"),
+        // Fixtures are generated (git-ignored) and read from disk next to the test sources, not bundled.
+        .testTarget(name: "ShelfScanTests", dependencies: ["ShelfScan", "ShelfScanVision"], path: "Tests/ShelfScanTests",
+                    exclude: ["Fixtures"]),
     ]
 )

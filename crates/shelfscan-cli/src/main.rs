@@ -4,6 +4,7 @@
 //! shelfscan --source synthetic --out out/
 //! shelfscan --source images --input ./photos --review
 //! shelfscan --source ffmpeg --input-format avfoundation --input 0 --seconds 30 --review   # Mac webcam (UNVERIFIED)
+//! shelfscan fixtures --out fixtures/                                                      # test PNGs for Swift / Kotlin
 //! ```
 //! Cloud is opt-in: `--anthropic` (reads ANTHROPIC_API_KEY), `--off-contact you@example.com`,
 //! `--shopify-shop my-store` (reads SHOPIFY_ADMIN_TOKEN, or SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET; creates DRAFT products only).
@@ -17,8 +18,10 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use clap::{Parser, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use shelfscan::*;
+
+mod fixtures;
 
 #[derive(Copy, Clone, ValueEnum)]
 enum Source {
@@ -38,9 +41,20 @@ enum ModeArg {
     Describe,
 }
 
+#[derive(Subcommand)]
+enum Cmd {
+    /// Write deterministic test fixtures (PNGs + fixtures.json) for tests in Swift, Kotlin or Python.
+    Fixtures {
+        #[arg(long, default_value = "fixtures")]
+        out: PathBuf,
+    },
+}
+
 #[derive(Parser)]
-#[command(name = "shelfscan", version, about = "Scan a table or shelf, index the products, draft one listing each.")]
+#[command(name = "shelfscan", version, about = "Scan a table or shelf, index the products, draft one listing each.", args_conflicts_with_subcommands = true)]
 struct Args {
+    #[command(subcommand)]
+    command: Option<Cmd>,
     #[arg(long, value_enum, default_value = "synthetic")]
     source: Source,
     /// Folder (images), file or device (ffmpeg).
@@ -261,6 +275,9 @@ async fn review(engine: &Engine) -> Result<()> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let args = Args::parse();
+    if let Some(Cmd::Fixtures { out }) = &args.command {
+        return fixtures::write(out);
+    }
     std::fs::create_dir_all(args.out.join("crops"))?;
 
     let cfg = EngineConfig {

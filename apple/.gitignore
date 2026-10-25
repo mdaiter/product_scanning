@@ -2,3 +2,4 @@ build/
 Sources/ShelfScan/shelfscan.swift
 .build/
 *.xcodeproj/xcuserdata/
+Tests/ShelfScanTests/Fixtures/
