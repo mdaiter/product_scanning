@@ -99,3 +99,7 @@ Format per entry: date, item, did, measured, blocked, next.
 * **Tried and removed:** software zoom (centre crop / lock-on crop, upscaled to 800 px): read nothing smaller than one full-frame
   Vision call (smallest QR 34 px sharp, 48 px slightly soft, either way). Smaller codes need optical zoom (iPhone, Phase 2).
 * **Not yet:** a live read on the webcam with this mode (Matt to try).
+
+## 2026-10-25 · Barcode mode verified live
+
+* Matt read a QR code with the Mac demo's barcode mode on the FaceTime HD Camera. Product barcodes (EAN / UPC) live: not yet reported.

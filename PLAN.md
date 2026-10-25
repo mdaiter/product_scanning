@@ -265,6 +265,7 @@ Detailed specs with work items and acceptance tests are in `docs/`. Hand-off ent
 | `ShelfScanCapture` (CameraSource, ScanModel, LatencyMeter) | ran live in the Mac demo (FaceTime HD Camera, 1920x1080, host-clock timestamps); the SwiftUI `OverlayView` is unused (the demo draws with layers) |
 | Mac demo overlay geometry and Boxes / Labels toggles | ran (off-screen self-test in `scripts/swift_test.sh`; caught a vertically mirrored overlay on the first live run) |
 | Flip-for-barcode flow through the engine (focus → 2 agreeing reads → `Confirmed(barcode)`), camera-format frames | ran (`BarcodeFlowTests`, Vision and rxing, debug and release) |
+| Mac demo barcode mode (BarcodeLens on raw webcam frames, highlight + magnified card) | QR read **live on the Mac webcam** (Matt, 2026-10-25); EAN / UPC on the webcam not yet confirmed |
 | CoreML DETR (Apple, Apache-2.0), SAM 2.1 tiny (Apple, Apache-2.0), MobileCLIP S0/S2 (Apple, **research-only licence**) | ran (unit tests + live timing, `docs/results/phase1-foundation-models.md`) |
 | Detector / embedder bake-off on tabletop footage, calibrated `sku_similarity` | **NOT RUN** (no dataset) |
 | Swift package for iOS | **UNTESTED** (iOS platform not installed in Xcode on the dev Mac) |
