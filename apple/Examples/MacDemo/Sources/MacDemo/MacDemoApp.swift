@@ -13,6 +13,7 @@ struct Options {
     var sam = false
     var credits: Int?
     var autoStart = false
+    var barcodeMode = false
     var describer: GuesserChoice?
     var defaults = false
     var overlayTest = false
@@ -32,6 +33,7 @@ struct Options {
             case "--sam": o.sam = true
             case "--credits": o.credits = it.next().flatMap(Int.init)
             case "--start": o.autoStart = true   // start scanning at launch
+            case "--barcode": o.barcodeMode = true   // open in barcode mode
             case "--describer":
                 switch it.next() { case "s0": o.describer = .clipS0; case "claude": o.describer = .clipClaude; default: o.describer = .clipS2 }
             case "--embedder-clip": o.embedder = it.next() == "s0" ? .mobileclipS0 : .mobileclipS2
@@ -79,7 +81,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         guard let seconds = options.measureSeconds else {
-            if options.autoStart { await controller.start() }
+            if options.autoStart || options.barcodeMode { await controller.start() }
+            if options.barcodeMode { await controller.setBarcodeMode(true) }
             return
         }
         await controller.start()
