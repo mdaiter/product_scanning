@@ -12,8 +12,18 @@ enum DetectorChoice: String, CaseIterable, Identifiable, Codable {
 
 enum EmbedderChoice: String, CaseIterable, Identifiable, Codable {
     case color = "Color (Rust)", featurePrint = "Vision feature print"
+    case mobileclipS0 = "MobileCLIP S0 (research licence)", mobileclipS2 = "MobileCLIP S2 (research licence)"
     var id: String { rawValue }
-    var plugin: Embedder { self == .color ? ColorEmbedder() : VisionFeaturePrintEmbedder() }
+    var clipVariant: MobileCLIP.Variant? { self == .mobileclipS0 ? .s0 : self == .mobileclipS2 ? .s2 : nil }
+}
+
+enum GuesserChoice: String, CaseIterable, Identifiable, Codable {
+    case placeholder = "Placeholder (offline, no model)"
+    case clipS0 = "MobileCLIP S0 zero-shot (research licence)", clipS2 = "MobileCLIP S2 zero-shot (research licence)"
+    case clipClaude = "MobileCLIP S2 + Claude (cloud: masked crops)"
+    var id: String { rawValue }
+    var clipVariant: MobileCLIP.Variant? { self == .clipS0 ? .s0 : self == .placeholder ? nil : .s2 }
+    var usesCloud: Bool { self == .clipClaude }
 }
 
 enum ScannerChoice: String, CaseIterable, Identifiable, Codable {
@@ -78,7 +88,8 @@ final class DemoController: ObservableObject {
             let listener = ModelListener(model: model)
             let engine = try EngineBuilder(config: s.engineConfig)
                 .detector(d: try s.detectorPlugin())
-                .embedder(e: s.embedder.plugin)
+                .embedder(e: try s.embedderPlugin())
+                .guesser(g: try s.guesserPlugin())
                 .barcodeScanner(s: s.scanner.plugin)
                 .listener(l: listener)
                 .build()
@@ -201,7 +212,8 @@ final class DemoController: ObservableObject {
         let u = listener?.uiLatency.percentiles() ?? none
         let h = hitches.snapshot()
         return [
-            "plugins": ["detector": settings.detector.rawValue, "vision_masks": settings.visionMasks, "embedder": settings.embedder.rawValue, "scanner": settings.scanner.rawValue],
+            "plugins": ["detector": settings.detector.rawValue, "vision_masks": settings.visionMasks, "embedder": settings.embedder.rawValue, "scanner": settings.scanner.rawValue,
+                        "sam_refine": settings.samRefine, "guesser": settings.guesser.rawValue],
             "settings": (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(settings))) ?? [:],
             "frame": ["width": Int(frameSize.width), "height": Int(frameSize.height)],
             "camera": camera?.deviceName ?? "",

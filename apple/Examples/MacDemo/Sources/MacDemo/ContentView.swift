@@ -62,6 +62,12 @@ struct ItemList: View {
                             Text(item.guess.title.isEmpty ? item.label : item.guess.title).font(.callout).lineLimit(2)
                             Text("\(item.id) · x\(item.quantity) · \(stateText(item.state))\(item.gtin.map { " · \($0)" } ?? "")")
                                 .font(.caption).foregroundColor(.secondary)
+                            if item.guess.confidence > 0 {
+                                Text("confidence \(Int((item.guess.confidence * 100).rounded()))%").font(.caption2).foregroundColor(.secondary)
+                            }
+                            if let alt = item.guess.attributes.first(where: { $0.name == "Other guesses" }) {
+                                Text("or: \(alt.value)").font(.caption2).foregroundColor(.secondary).lineLimit(2)
+                            }
                             if item.needsBarcode { Text("needs barcode").font(.caption2).foregroundColor(.orange) }
                         }
                     }
@@ -119,6 +125,9 @@ struct StatsStrip: View {
             }.keyboardShortcut(.space, modifiers: [])
             let s = controller.stats
             Text("frames in \(s.framesIn) · dropped \(s.framesDropped) · skipped \(s.framesSkipped) · processed \(s.framesProcessed) · items \(s.items)")
+            if controller.running && controller.settings.guesser.usesCloud {
+                Text("☁ cloud on").foregroundColor(.orange).help("Masked product crops go to the Anthropic API")
+            }
             Text("boxes \(controller.model.boxes.count) · hidden \(controller.model.hiddenCount)")
             Text(controller.latencyText)
             Text(controller.hitchText)

@@ -10,6 +10,9 @@ struct Options {
     var embedder: EmbedderChoice?
     var scanner: ScannerChoice?
     var masks: Bool?
+    var sam = false
+    var credits: Int?
+    var describer: GuesserChoice?
     var defaults = false
     var overlayTest = false
 
@@ -25,6 +28,11 @@ struct Options {
             case "--embedder": o.embedder = it.next() == "featureprint" ? .featurePrint : .color
             case "--scanner": o.scanner = it.next() == "vision" ? .vision : .rxing
             case "--no-masks": o.masks = false
+            case "--sam": o.sam = true
+            case "--credits": o.credits = it.next().flatMap(Int.init)
+            case "--describer":
+                switch it.next() { case "s0": o.describer = .clipS0; case "claude": o.describer = .clipClaude; default: o.describer = .clipS2 }
+            case "--embedder-clip": o.embedder = it.next() == "s0" ? .mobileclipS0 : .mobileclipS2
             case "--defaults": o.defaults = true   // ignore saved settings
             case "--overlay-test": o.overlayTest = true   // no camera: draw one known box to check overlay geometry
             default: break
@@ -57,6 +65,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let e = options.embedder { s.embedder = e }
         if let b = options.scanner { s.scanner = b }
         if let m = options.masks { s.visionMasks = m }
+        if options.sam { s.samRefine = true }
+        if let c = options.credits { s.frameCredits = c }
+        if let g = options.describer { s.guesser = g }
         controller.setInitial(s)
         if options.overlayTest {
             controller.frameSize = CGSize(width: 1920, height: 1080)

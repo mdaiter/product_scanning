@@ -29,7 +29,28 @@ struct SettingsPanel: View {
                         FloatRow(label: "Colour threshold", value: $controller.draft.blobThreshold, range: 1...255, step: 1, format: "%.0f",
                                  help: "Difference from the border colour that counts as an object. Blob needs a plain table.")
                     }
+                    Toggle("Refine masks with SAM 2.1 tiny", isOn: $controller.draft.samRefine)
+                        .help("Boxes from the detector above become SAM prompts; SAM returns pixel masks. ~120 ms per frame + ~7 ms per box.")
+                    if controller.draft.samRefine {
+                        IntRow(label: "SAM boxes per frame", value: $controller.draft.samMaxPrompts, range: 1...15, step: 1, help: "Largest boxes first; the rest keep the detector's mask.")
+                        FloatRow(label: "SAM min quality", value: $controller.draft.samMinQuality, range: 0...1, step: 0.05, format: "%.2f", help: "SAM's own IoU estimate; below this the detector's mask is kept.")
+                    }
                     Picker("Embedder", selection: $controller.draft.embedder) { ForEach(EmbedderChoice.allCases) { Text($0.rawValue).tag($0) } }
+                    Picker("Describer", selection: $controller.draft.guesser) { ForEach(GuesserChoice.allCases) { Text($0.rawValue).tag($0) } }
+                        .help("What the item is called before you confirm it. MobileCLIP ranks a product vocabulary against the masked crop.")
+                    if controller.draft.guesser != .placeholder {
+                        TextField("Extra vocabulary (comma-separated)", text: $controller.draft.extraVocabulary)
+                    }
+                    if controller.draft.guesser.usesCloud {
+                        Text("Sends masked product crops to the Anthropic API, once per new item. Crops that look like a person, hand, face or screen are not sent.")
+                            .font(.caption2).foregroundColor(.secondary)
+                        TextField("Claude model (empty = library default)", text: $controller.draft.claudeModel)
+                        Toggle("Save every request for audit", isOn: $controller.draft.dumpRequests)
+                        if controller.draft.dumpRequests { Text(controller.draft.dumpDir).font(.caption2).foregroundColor(.secondary) }
+                    }
+                    if controller.draft.embedder.clipVariant != nil || controller.draft.guesser.clipVariant != nil {
+                        Text("MobileCLIP weights: Apple research licence, not for commercial use.").font(.caption2).foregroundColor(.orange)
+                    }
                     Picker("Barcode", selection: $controller.draft.scanner) { ForEach(ScannerChoice.allCases) { Text($0.rawValue).tag($0) } }
                 }
                 Section("Frames") {
@@ -40,7 +61,9 @@ struct SettingsPanel: View {
                     FloatRow(label: "Novelty threshold", value: $controller.draft.noveltyThreshold, range: 0...5, step: 0.1, format: "%.1f",
                              help: "Skip a frame that differs less than this from the last one (0 = off). A still scene is mostly skipped.")
                     FloatRow(label: "Blur gate", value: $controller.draft.blurGateRatio, range: 0...1, step: 0.05, format: "%.2f",
-                             help: "Skip frames sharper than less than this fraction of the running median (0 = off).")
+                             help: "Skip frames whose sharpness is below this fraction of the running median (0 = off).")
+                    IntRow(label: "Frames in flight", value: $controller.draft.frameCredits, range: 1...8, step: 1,
+                           help: "Frames queued in the pipeline. With slow models, latency ≈ this × per-frame cost: use 1 for the freshest boxes.")
                 }
                 Section("Detection") {
                     FloatRow(label: "Min score", value: $controller.draft.minScore, range: 0...1, step: 0.05, format: "%.2f", help: "Detections below this confidence are dropped.")

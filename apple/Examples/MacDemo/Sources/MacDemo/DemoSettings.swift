@@ -18,13 +18,26 @@ struct DemoSettings: Codable, Equatable {
     var detrIncludeStuff = false
     /// Comma-separated class names the DETR detector never reports (e.g. "person, tv").
     var detrSkipLabels = ""
+    var samRefine = false
+    var samMaxPrompts = 6
+    var samMinQuality: Float = 0.5
     var embedder = EmbedderChoice.featurePrint
+    var guesser = GuesserChoice.placeholder
+    /// Extra words for the zero-shot vocabulary (comma-separated), added to the built-in list.
+    var extraVocabulary = ""
+    /// Claude model id for the cloud describer; empty = the library default (cloud/anthropic.rs DEFAULT_MODEL).
+    var claudeModel = ""
+    /// Write every cloud request (images as files, never headers / keys) here: the 1.11 privacy audit.
+    var dumpRequests = true
+    var dumpDir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents/shelfscan/requests").path
     var scanner = ScannerChoice.vision
     // frames
     var analysisFps: Float = 10
     var analysisMaxSide = 960
     var noveltyThreshold: Float = 0.6
     var blurGateRatio: Float = 0.25
+    /// Frames in flight. Latency is roughly credits x per-frame cost once the pipeline is saturated.
+    var frameCredits = 4
     // detection
     var minScore: Float = 0.35
     var nmsIou: Float = 0.5
@@ -47,10 +60,51 @@ struct DemoSettings: Codable, Equatable {
     var guessRetries = 2
 
     /// Repo checkout's models/ (scripts/fetch_models.sh), found relative to this source file.
-    static let defaultDETRPath = URL(fileURLWithPath: #filePath)
-        .appendingPathComponent("../../../../../../models/DETRResnet50SemanticSegmentationF16.mlpackage").standardized.path
+    static let modelsDir = URL(fileURLWithPath: #filePath).appendingPathComponent("../../../../../../models").standardized
+    static let defaultDETRPath = modelsDir.appendingPathComponent("DETRResnet50SemanticSegmentationF16.mlpackage").path
 
     func detectorPlugin() throws -> Detector {
+        let base = try baseDetector()
+        guard samRefine else { return base }
+        return SAMRefinedDetector(base: base, sam: try ModelCache.shared.sam(), maxPrompts: samMaxPrompts, minQuality: samMinQuality)
+    }
+
+    func embedderPlugin() throws -> Embedder {
+        switch embedder {
+        case .color: return ColorEmbedder()
+        case .featurePrint: return VisionFeaturePrintEmbedder()
+        case .mobileclipS0, .mobileclipS2: return MobileCLIPEmbedder(clip: try ModelCache.shared.clip(embedder.clipVariant!))
+        }
+    }
+
+    func guesserPlugin() throws -> ProductGuesser {
+        guard let v = guesser.clipVariant else { return PlaceholderGuesser() }
+        let extra = extraVocabulary.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.filter { !$0.isEmpty }
+        var seen = Set<String>()
+        let words = (ProductVocabulary.default + extra).filter { seen.insert($0).inserted }
+        let local = try ModelCache.shared.guesser(v, vocabulary: words)
+        guard guesser.usesCloud else { return local }
+        guard let key = Self.anthropicKey() else {
+            throw ShelfError.InvalidInput(msg: "the Claude describer needs ANTHROPIC_API_KEY in the environment or a key in \(Self.keyFile.path) (mode 600)")
+        }
+        // Read by the Rust HTTP client when the guesser is built (cloud/http.rs DUMP_ENV).
+        if dumpRequests { setenv("SHELFSCAN_DUMP_REQUESTS", dumpDir, 1) } else { unsetenv("SHELFSCAN_DUMP_REQUESTS") }
+        let cloud = AnthropicGuesser(apiKey: key, model: claudeModel.isEmpty ? nil : claudeModel)
+        return HybridGuesser(local: local, cloud: cloud)
+    }
+
+    /// Outside the repo, readable only by the user. The key is never logged or shown.
+    static let keyFile = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/shelfscan/anthropic_key")
+
+    static func anthropicKey() -> String? {
+        if let k = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"], !k.isEmpty { return k }
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: keyFile.path),
+              let perms = attrs[.posixPermissions] as? Int, perms & 0o077 == 0,   // refuse a key file others can read
+              let k = try? String(contentsOf: keyFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines), !k.isEmpty else { return nil }
+        return k
+    }
+
+    private func baseDetector() throws -> Detector {
         switch detector {
         case .blob: return BlobDetector.withParams(workSide: UInt32(blobWorkSide), minThreshold: blobThreshold)
         case .vision: return VisionForegroundDetector(minPixels: visionMinPixels, emitMasks: visionMasks)
@@ -70,6 +124,7 @@ struct DemoSettings: Codable, Equatable {
         c.analysisMaxSide = UInt32(analysisMaxSide)
         c.noveltyThreshold = noveltyThreshold
         c.blurGateRatio = blurGateRatio
+        c.frameCredits = UInt32(frameCredits)
         c.minScore = minScore
         c.nmsIou = nmsIou
         c.minBoxArea = minBoxArea
@@ -90,7 +145,7 @@ struct DemoSettings: Codable, Equatable {
 
     var summary: String {
         let extra = detector == .vision && !visionMasks ? " (no masks)" : detector == .detr ? " (\(detrUnits.rawValue))" : ""
-        return "\(detector.rawValue)\(extra) / \(embedder.rawValue) / \(scanner.rawValue)"
+        return "\(detector.rawValue)\(extra)\(samRefine ? " + SAM" : "") / \(embedder.rawValue) / \(guesser.rawValue) / \(scanner.rawValue)"
     }
 
     private static let key = "shelfscan.macdemo.settings"
@@ -120,5 +175,41 @@ enum ComputeChoice: String, CaseIterable, Identifiable, Codable {
         case .all: return .all
         case .cpuOnly: return .cpuOnly
         }
+    }
+}
+
+/// Models are big and slow to load; keep them across engine rebuilds (Apply). The zero-shot guesser also caches its text
+/// embeddings per vocabulary.
+final class ModelCache: @unchecked Sendable {
+    static let shared = ModelCache()
+    private let lock = NSLock()
+    private var sam2: SAM2Tiny?
+    private var clips: [MobileCLIP.Variant: MobileCLIP] = [:]
+    private var guessers: [String: CLIPZeroShotGuesser] = [:]
+
+    func sam() throws -> SAM2Tiny {
+        lock.lock(); defer { lock.unlock() }
+        if let s = sam2 { return s }
+        let s = try SAM2Tiny(modelsDir: DemoSettings.modelsDir)
+        sam2 = s
+        return s
+    }
+
+    func clip(_ v: MobileCLIP.Variant) throws -> MobileCLIP {
+        lock.lock(); defer { lock.unlock() }
+        if let c = clips[v] { return c }
+        let c = try MobileCLIP(modelsDir: DemoSettings.modelsDir, variant: v)
+        clips[v] = c
+        return c
+    }
+
+    func guesser(_ v: MobileCLIP.Variant, vocabulary: [String]) throws -> CLIPZeroShotGuesser {
+        let key = "\(v.rawValue)|\(vocabulary.joined(separator: ","))"
+        lock.lock()
+        if let g = guessers[key] { lock.unlock(); return g }
+        lock.unlock()
+        let g = try CLIPZeroShotGuesser(clip: try clip(v), vocabulary: vocabulary)
+        lock.lock(); guessers[key] = g; lock.unlock()
+        return g
     }
 }
