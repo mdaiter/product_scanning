@@ -86,13 +86,17 @@ final class DemoController: ObservableObject {
         do {
             let s = settings
             let listener = ModelListener(model: model)
-            let engine = try EngineBuilder(config: s.engineConfig)
-                .detector(d: try s.detectorPlugin())
-                .embedder(e: try s.embedderPlugin())
-                .guesser(g: try s.guesserPlugin())
-                .barcodeScanner(s: s.scanner.plugin)
-                .listener(l: listener)
-                .build()
+            status = "Loading models for \(pluginSummary)…"
+            // Model loading and the describer's text embeddings take seconds: build off the main thread.
+            let engine = try await Task.detached(priority: .userInitiated) {
+                try EngineBuilder(config: s.engineConfig)
+                    .detector(d: try s.detectorPlugin())
+                    .embedder(e: try s.embedderPlugin())
+                    .guesser(g: try s.guesserPlugin())
+                    .barcodeScanner(s: s.scanner.plugin)
+                    .listener(l: listener)
+                    .build()
+            }.value
             let camera = CameraSource(engine: engine)
             camera.onFrameSize = { [weak self] w, h in
                 Task { @MainActor in
