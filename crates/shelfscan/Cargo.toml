@@ -1,0 +1,38 @@
+[package]
+name = "shelfscan"
+description = "Scan a store with a camera, index products, draft listings, publish to a storefront. ractor actors on tokio, UniFFI bindings."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "shelfscan"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[features]
+default = ["net", "sqlite", "barcode"]
+# HTTP storefronts and cloud plugins (Shopify Admin API, Anthropic, Open Food Facts). Pulls in ureq + rustls.
+net = ["dep:ureq"]
+# SQLite Store (FTS5 keyword search + vector search + fused ranking). Bundled SQLite.
+sqlite = ["dep:rusqlite"]
+# Default BarcodeScanner backed by rxing (a ZXing port). Phones should prefer Vision / ML Kit via the trait.
+barcode = ["dep:rxing"]
+
+[dependencies]
+uniffi = { workspace = true }
+ractor = "0.16"
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
+thiserror = "2"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+tracing = "0.1"
+ureq = { version = "3", optional = true, features = ["json"] }
+rusqlite = { version = "0.41", optional = true, features = ["bundled"] }
+rxing = { version = "0.9", optional = true, default-features = false, features = ["decoders", "encoding_rs", "oned", "multi_barcode_readers"] }
+
+[dev-dependencies]
+tempfile = "3"
+csv = "1"

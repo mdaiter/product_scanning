@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = ["crates/shelfscan", "crates/uniffi-bindgen", "crates/uniffi-bindgen-swift", "crates/shelfscan-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.80"
+
+[workspace.dependencies]
+uniffi = "0.32"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+# Keep unwinding: the actor runtime isolates a panicking handler instead of aborting the process.
+panic = "unwind"

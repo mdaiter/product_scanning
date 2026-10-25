@@ -1,0 +1,19 @@
+[package]
+name = "shelfscan-cli"
+description = "Mac/Linux/Windows demo for the shelfscan library"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "shelfscan"
+path = "src/main.rs"
+
+[dependencies]
+shelfscan = { path = "../shelfscan" }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+serde_json = "1"
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }

@@ -1,0 +1,4 @@
+build/
+Sources/ShelfScan/shelfscan.swift
+.build/
+*.xcodeproj/xcuserdata/
