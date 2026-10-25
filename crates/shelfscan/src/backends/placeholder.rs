@@ -8,6 +8,8 @@ const NOUNS: [&str; 4] = ["product", "item", "object", "thing"];
 
 /// Offline guesser: "Unidentified red item". It never claims to know what something is
 /// (confidence 0) and honours `excluded_titles` so the reject → re-guess loop is testable.
+/// A specific detector class (e.g. "bottle" from a COCO model) is tried first as the noun: "Unidentified red bottle?"
+/// is still a guess, which is why the confidence stays 0.
 #[derive(uniffi::Object)]
 pub struct PlaceholderGuesser;
 
@@ -24,7 +26,10 @@ impl ProductGuesser for PlaceholderGuesser {
     fn guess(&self, request: GuessRequest) -> Result<ProductGuess> {
         let req = request;
         let color = req.dominant_colors.first().cloned();
-        let candidates = NOUNS.iter().map(|n| match &color {
+        let label = req.detector_label.trim().to_lowercase();
+        let specific = (!label.is_empty() && !NOUNS.contains(&label.as_str())).then_some(label);
+        let nouns: Vec<&str> = specific.iter().map(String::as_str).chain(NOUNS.iter().copied()).collect();
+        let candidates = nouns.iter().map(|n| match &color {
             Some(c) => format!("Unidentified {c} {n}"),
             None => format!("Unidentified {n}"),
         });
@@ -107,11 +112,15 @@ mod tests {
     use crate::imaging::rgb_to_frame;
 
     fn req(excluded: &[&str]) -> GuessRequest {
+        req_labelled("product", excluded)
+    }
+
+    fn req_labelled(label: &str, excluded: &[&str]) -> GuessRequest {
         GuessRequest {
             item_id: "item-001".into(),
             image: rgb_to_frame(&image::RgbImage::new(4, 4), 0),
             extra_views: vec![],
-            detector_label: "product".into(),
+            detector_label: label.into(),
             dominant_colors: vec!["red".into()],
             excluded_titles: excluded.iter().map(|s| s.to_string()).collect(),
             mode: ScanMode::BarcodeFirst,
@@ -128,6 +137,15 @@ mod tests {
         assert_ne!(second.title, first.title);
         let many = g.guess(req(&["Unidentified red product", "Unidentified red item", "Unidentified red object", "Unidentified red thing"])).unwrap();
         assert!(many.title.starts_with("Unidentified product #"));
+    }
+
+    #[test]
+    fn uses_a_specific_detector_label_first() {
+        let g = PlaceholderGuesser;
+        assert_eq!(g.guess(req_labelled("bottle", &[])).unwrap().title, "Unidentified red bottle");
+        assert_eq!(g.guess(req_labelled("bottle", &["Unidentified red bottle"])).unwrap().title, "Unidentified red product");
+        assert_eq!(g.guess(req_labelled("Object", &[])).unwrap().title, "Unidentified red product");
+        assert_eq!(g.guess(req_labelled("bottle", &[])).unwrap().confidence, 0.0);
     }
 
     #[test]
