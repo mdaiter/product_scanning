@@ -12,6 +12,9 @@ struct PreviewView: NSViewRepresentable {
     let boxes: [OverlayBox]
     var showBoxes = true
     var showLabels = true
+    /// Barcode mode: dim everything but the codes, outline each code; with none in view, a centred aiming square.
+    var lensActive = false
+    var lensQuads: [[CGPoint]] = []
 
     func makeNSView(context: Context) -> PreviewNSView { PreviewNSView() }
 
@@ -22,7 +25,9 @@ struct PreviewView: NSViewRepresentable {
         view.setSession(session)
         view.frameSize = frameSize
         view.showLabels = showLabels
-        view.boxes = showBoxes ? boxes : []
+        view.lensActive = lensActive
+        view.lensQuads = lensQuads
+        view.boxes = showBoxes && !lensActive ? boxes : []
     }
 }
 
@@ -33,6 +38,9 @@ final class PreviewNSView: NSView {
     var boxes: [OverlayBox] = [] { didSet { drawBoxes() } }
     var showLabels = true
     var overlayLayerCount: Int { overlay.sublayers?.count ?? 0 }
+    private let lensLayer = CALayer()
+    var lensActive = false { didSet { if lensActive != oldValue { drawLens() } } }
+    var lensQuads: [[CGPoint]] = [] { didSet { drawLens() } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -47,6 +55,8 @@ final class PreviewNSView: NSView {
         // come out mirrored vertically (seen on the first live run: the box covered the top of the frame, the person the bottom).
         overlay.isGeometryFlipped = true
         root.addSublayer(overlay)
+        lensLayer.isGeometryFlipped = true
+        root.addSublayer(lensLayer)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -69,8 +79,10 @@ final class PreviewNSView: NSView {
         CATransaction.setDisableActions(true)
         preview.frame = bounds
         overlay.frame = videoRect
+        lensLayer.frame = videoRect
         CATransaction.commit()
         drawBoxes()
+        drawLens()
     }
 
     private func drawBoxes() {
@@ -98,6 +110,52 @@ final class PreviewNSView: NSView {
             overlay.addSublayer(text)
         }
         CATransaction.commit()
+    }
+
+    private func drawLens() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        lensLayer.sublayers?.forEach { $0.removeFromSuperlayer() }
+        defer { CATransaction.commit() }
+        guard lensActive else { return }
+        let size = lensLayer.bounds.size
+        let quads = lensQuads.map { q in q.map { CGPoint(x: $0.x * size.width, y: $0.y * size.height) } }
+        // dim everything outside the codes (even-odd: the codes are holes in the veil)
+        let veil = CGMutablePath()
+        veil.addRect(CGRect(origin: .zero, size: size))
+        if quads.isEmpty {
+            let side = min(size.width, size.height) * 0.45
+            veil.addRect(CGRect(x: (size.width - side) / 2, y: (size.height - side) / 2, width: side, height: side))
+        }
+        for q in quads where q.count == 4 { veil.addLines(between: q); veil.closeSubpath() }
+        let dim = CAShapeLayer()
+        dim.path = veil
+        dim.fillRule = .evenOdd
+        dim.fillColor = NSColor.black.withAlphaComponent(quads.isEmpty ? 0.35 : 0.55).cgColor
+        lensLayer.addSublayer(dim)
+        if quads.isEmpty {
+            let side = min(size.width, size.height) * 0.45
+            let aim = CAShapeLayer()
+            aim.path = CGPath(rect: CGRect(x: (size.width - side) / 2, y: (size.height - side) / 2, width: side, height: side), transform: nil)
+            aim.fillColor = nil
+            aim.strokeColor = NSColor.white.withAlphaComponent(0.8).cgColor
+            aim.lineDashPattern = [8, 6]
+            aim.lineWidth = 2
+            lensLayer.addSublayer(aim)
+            return
+        }
+        for q in quads where q.count == 4 {
+            let outline = CGMutablePath()
+            outline.addLines(between: q)
+            outline.closeSubpath()
+            let shape = CAShapeLayer()
+            shape.path = outline
+            shape.fillColor = nil
+            shape.strokeColor = NSColor.systemGreen.cgColor
+            shape.lineWidth = 3
+            shape.lineJoin = .round
+            lensLayer.addSublayer(shape)
+        }
     }
 
     private func color(_ b: OverlayBox) -> NSColor {

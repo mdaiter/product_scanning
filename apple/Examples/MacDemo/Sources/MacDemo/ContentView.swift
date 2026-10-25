@@ -16,9 +16,14 @@ struct ContentView: View {
             HStack(spacing: 0) {
                 ZStack(alignment: .topLeading) {
                     PreviewView(session: controller.session, frameSize: controller.frameSize, boxes: model.boxes,
-                                showBoxes: showBoxes, showLabels: showLabels)
+                                showBoxes: showBoxes, showLabels: showLabels,
+                                lensActive: controller.barcodeMode, lensQuads: controller.lensHits.map(\.corners))
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 6) {
+                            Toggle("Barcode mode", isOn: Binding(get: { controller.barcodeMode },
+                                                                 set: { on in Task { await controller.setBarcodeMode(on) } }))
+                                .keyboardShortcut("b", modifiers: [.command, .shift])
+                                .help("Read QR codes and barcodes from the raw camera picture, highlight and magnify them (⇧⌘B). Product scanning pauses.")
                             Toggle("Boxes", isOn: $showBoxes).keyboardShortcut("b", modifiers: .command).help("Show / hide boxes (⌘B)")
                             Toggle("Labels", isOn: $showLabels).keyboardShortcut("l", modifiers: .command).help("Show / hide labels (⌘L)")
                                 .disabled(!showBoxes)
@@ -26,7 +31,11 @@ struct ContentView: View {
                                 Text("\(model.hiddenCount) hidden").font(.caption).padding(4).background(.black.opacity(0.6)).foregroundColor(.white)
                             }
                         }.toggleStyle(.button).controlSize(.small)
-                        if let id = controller.focused {
+                        if controller.barcodeMode {
+                            Text(controller.lensHits.isEmpty ? "Barcode mode: hold a QR code or barcode inside the square"
+                                                             : "Reading \(controller.lensHits.count) code\(controller.lensHits.count == 1 ? "" : "s")…")
+                                .font(.callout).padding(6).background(.green.opacity(0.85)).foregroundColor(.black)
+                        } else if let id = controller.focused {
                             HStack {
                                 Text("Scanning barcode for \(title(id)): hold the barcode up to the camera").font(.callout)
                                 Button("Stop") { controller.stopBarcode() }
@@ -36,7 +45,15 @@ struct ContentView: View {
                                 .font(.callout).padding(6).background(.orange.opacity(0.85)).foregroundColor(.black)
                         }
                     }.padding(8)
+                    if controller.barcodeMode, let r = controller.lensRead {
+                        LensCard(controller: controller, read: r)
+                            .padding(12)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                            .transition(.scale(scale: 0.6, anchor: .bottomTrailing).combined(with: .opacity))
+                            .id(r.id)
+                    }
                 }
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: controller.lensRead?.id)
                 Divider()
                 VStack(spacing: 0) {
                     Picker("", selection: $panel) {
@@ -182,5 +199,61 @@ struct StatsStrip: View {
             Text(controller.status).font(.caption2).foregroundColor(.secondary).padding(.leading, 8).offset(y: 14)
         }
         .padding(.bottom, 10)
+    }
+}
+
+/// The magnified code and what it says (the WeChat-style zoom-in), with what can be done with it.
+struct LensCard: View {
+    @ObservedObject var controller: DemoController
+    let read: DemoController.LensRead
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let img = read.image {
+                Image(decorative: img, scale: 1).resizable().interpolation(.high).aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: 300, maxHeight: 220)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.green, lineWidth: 3))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            Text(read.hit.payload).font(.system(.title3, design: .monospaced)).textSelection(.enabled).lineLimit(4)
+            Text(kind).font(.caption).foregroundColor(.secondary)
+            HStack {
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(read.hit.payload, forType: .string)
+                }
+                if read.hit.gtinValid == true {
+                    Menu("Attach to item") {
+                        ForEach(controller.items, id: \.id) { i in
+                            Button("\(i.guess.title.isEmpty ? i.id : i.guess.title)\(i.needsBarcode ? "  (needs barcode)" : "")") {
+                                controller.attach(read.hit, to: i.id)
+                            }
+                        }
+                    }.disabled(controller.items.isEmpty).fixedSize()
+                }
+                Button("Dismiss") { controller.lensRead = nil }
+            }.controlSize(.small)
+            if controller.lensHistory.count > 1 {
+                Divider()
+                Text("Earlier").font(.caption2).foregroundColor(.secondary)
+                ForEach(controller.lensHistory.dropFirst().prefix(4)) { h in
+                    Text("\(h.hit.symbology)  \(h.hit.payload)").font(.caption2.monospaced()).lineLimit(1)
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: 330, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .shadow(radius: 8)
+    }
+
+    private var kind: String {
+        var parts = [read.hit.symbology]
+        switch read.hit.gtinValid {
+        case true?: parts.append("valid GTIN-\(read.hit.payload.count) check digit")
+        case false?: parts.append("check digit WRONG: misread or not a GTIN")
+        case nil: if let u = URL(string: read.hit.payload), u.scheme?.hasPrefix("http") == true { parts.append("link (not opened)") }
+        }
+        return parts.joined(separator: " · ")
     }
 }

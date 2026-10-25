@@ -13,6 +13,11 @@ public final class CameraSource: NSObject, AVCaptureVideoDataOutputSampleBufferD
     private var reportedSize = false
     /// Called once, on the camera queue, with the size of the frames handed to the engine (boxes are normalised to it).
     public var onFrameSize: ((Int, Int) -> Void)?
+    /// Every camera frame, before the engine's gate (raw sensor buffer, host-clock ms), for side readers such as barcode
+    /// mode. Called on the camera queue: hand the buffer off quickly and drop frames while busy.
+    public var frameTap: ((CVPixelBuffer, UInt64) -> Void)?
+    /// false pauses feeding the engine (the preview and `frameTap` keep running).
+    public var feedsEngine = true
     /// The capture device in use (on a Mac this can be the built-in camera or an iPhone via Continuity Camera).
     public private(set) var deviceName: String?
 
@@ -51,7 +56,8 @@ public final class CameraSource: NSObject, AVCaptureVideoDataOutputSampleBufferD
         let seconds = pts.seconds
         guard seconds.isFinite else { return }
         let ms = UInt64(max(1, seconds * 1000))
-        guard engine.wantsFrame(timestampMs: ms) else { return }   // free drop: no copy, camera never blocks
+        if let tap = frameTap, let pb = CMSampleBufferGetImageBuffer(sampleBuffer) { tap(pb, ms) }
+        guard feedsEngine, engine.wantsFrame(timestampMs: ms) else { return }   // free drop: no copy, camera never blocks
         guard let pb = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         CVPixelBufferLockBaseAddress(pb, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }

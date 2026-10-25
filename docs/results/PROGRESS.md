@@ -87,3 +87,15 @@ Format per entry: date, item, did, measured, blocked, next.
 * **Open (carried):** dataset and bake-offs (1.5, 1.7, 1.8), 1.9, CSV import (1.12), live webcam barcode check, ~450 ms hitch,
   over-splitting, cloud response parsing not confirmed.
 * **Next:** Phase 2 needs the iPhone details and the iOS platform download; Phase 3.0 needs the dev store and client id / secret.
+
+## 2026-10-25 · Barcode mode (Matt's request after Phase 1)
+
+* **Did:** `BarcodeLens` (ShelfScanVision): one Vision request per raw camera frame, codes located with a top-left-origin quad,
+  GS1 check digit, magnified crop; `ReadStabilizer` (two agreeing frames). `CameraSource.frameTap` / `feedsEngine`. Mac demo
+  "Barcode mode" (⇧⌘B): engine paused, everything but the code dimmed, code outlined, aiming square when nothing is in view,
+  WeChat-style card with the magnified code, payload, type, check-digit verdict, Copy, Attach to item, history.
+* **Measured:** QR box IoU 0.88 with where it was drawn; BGRA pixel-buffer path keeps geometry; overlay self-test puts the outline
+  at x 958–1281 / y 498–771 (expected 960–1280 / 500–770). Swift 27 tests pass.
+* **Tried and removed:** software zoom (centre crop / lock-on crop, upscaled to 800 px): read nothing smaller than one full-frame
+  Vision call (smallest QR 34 px sharp, 48 px slightly soft, either way). Smaller codes need optical zoom (iPhone, Phase 2).
+* **Not yet:** a live read on the webcam with this mode (Matt to try).

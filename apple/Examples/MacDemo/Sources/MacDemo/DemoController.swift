@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import CoreImage
 import Foundation
 import ShelfScan
 import ShelfScanCapture
@@ -49,6 +50,22 @@ final class DemoController: ObservableObject {
     @Published var latencyText = "latency: -"
     @Published var hitchText = "UI hitches: -"
     @Published var focused: String?
+
+    // ───────────── barcode mode: raw frames → BarcodeLens, engine paused ─────────────
+    struct LensRead: Identifiable {
+        let id = UUID()
+        let hit: BarcodeHit
+        let image: CGImage?
+        let at = Date()
+    }
+    @Published var barcodeMode = false
+    @Published var lensHits: [BarcodeHit] = []
+    @Published var lensRead: LensRead?
+    @Published var lensHistory: [LensRead] = []
+    private var lens: BarcodeLens?
+    private let lensQueue = DispatchQueue(label: "shelfscan.lens", qos: .userInitiated)
+    private let lensGate = BusyGate()
+    private let lensState = LensState()
 
     let model = ScanModel()
     private(set) var engine: Engine?
@@ -122,7 +139,10 @@ final class DemoController: ObservableObject {
 
     func stop() async {
         guard running, let engine else { return }
+        camera?.frameTap = nil
         camera?.stop()
+        barcodeMode = false
+        lensHits = []
         running = false
         ticker?.invalidate()
         hitches.stop()
@@ -166,6 +186,60 @@ final class DemoController: ObservableObject {
         if let list = try? await engine.catalog(includeHidden: false) { items = list }
         focused = engine.focusedItem()
     }
+
+    func setBarcodeMode(_ on: Bool) async {
+        if on && !running { await start() }
+        guard let camera else { return }
+        if on {
+            if lens == nil {
+                status = "Loading the barcode reader…"
+                lens = await Task.detached(priority: .userInitiated) { BarcodeLens() }.value
+            }
+            guard let lens else { return }
+            lensState.reset()
+            let ci = CIContext()
+            let (queue, gate, state) = (lensQueue, lensGate, lensState)
+            camera.frameTap = { [weak self] pb, _ in
+                guard gate.tryEnter() else { return }   // one frame at a time; the rest are dropped, the camera never waits
+                let frame = PixelBufferBox(pb)
+                queue.async {
+                    defer { gate.leave() }
+                    let img = CIImage(cvPixelBuffer: frame.pb)
+                    guard let cg = ci.createCGImage(img, from: img.extent) else { return }
+                    let hits = (try? lens.read(cg)) ?? []
+                    var read: LensRead?
+                    if let p = state.add(hits.first?.payload), let h = hits.first(where: { $0.payload == p }) {
+                        read = LensRead(hit: h, image: BarcodeLens.zoomImage(cg, hit: h))
+                    }
+                    Task { @MainActor in self?.lensFrame(hits, read) }
+                }
+            }
+            camera.feedsEngine = false
+            model.boxes = []
+            barcodeMode = true
+            status = "Barcode mode: point the camera at a QR code or barcode (scanning paused)"
+        } else {
+            camera.frameTap = nil
+            camera.feedsEngine = true
+            barcodeMode = false
+            lensHits = []
+            status = "Scanning with \(pluginSummary)"
+        }
+    }
+
+    private func lensFrame(_ hits: [BarcodeHit], _ read: LensRead?) {
+        guard barcodeMode else { return }
+        lensHits = hits
+        if let r = read {
+            lensRead = r
+            lensHistory.insert(r, at: 0)
+            if lensHistory.count > 20 { lensHistory.removeLast() }
+            status = "Read \(r.hit.symbology): \(r.hit.payload)"
+        }
+    }
+
+    /// Put a code read in barcode mode on an item (the engine validates it as a GTIN and confirms the item).
+    func attach(_ hit: BarcodeHit, to id: String) { typeBarcode(id, hit.payload) }
 
     // ───────────── review actions ─────────────
 
@@ -281,4 +355,26 @@ final class HitchMeter {
     }
 
     func snapshot() -> (count: Int, worstMs: Double) { (count, worst) }
+}
+
+/// Hands a camera buffer from the camera queue to the lens queue; it is only read after the hand-off.
+struct PixelBufferBox: @unchecked Sendable {
+    let pb: CVPixelBuffer
+    init(_ pb: CVPixelBuffer) { self.pb = pb }
+}
+
+/// Lets one barcode-mode frame in at a time from the camera queue.
+final class BusyGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var busy = false
+    func tryEnter() -> Bool { lock.lock(); defer { lock.unlock() }; if busy { return false }; busy = true; return true }
+    func leave() { lock.lock(); busy = false; lock.unlock() }
+}
+
+/// ReadStabilizer behind a lock (used from the lens queue).
+final class LensState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var s = ReadStabilizer()
+    func add(_ p: String?) -> String? { lock.lock(); defer { lock.unlock() }; return s.add(p) }
+    func reset() { lock.lock(); s = ReadStabilizer(); lock.unlock() }
 }

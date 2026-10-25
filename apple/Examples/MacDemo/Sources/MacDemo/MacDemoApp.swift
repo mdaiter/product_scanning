@@ -143,7 +143,26 @@ func overlaySelfTest() {
     }
     let counts = (layers(boxes: true, labels: true), layers(boxes: true, labels: false), layers(boxes: false, labels: true))
     print("SELFTEST overlay layers (boxes+labels, boxes only, off): \(counts)")
-    let ok = placed && counts == (2, 1, 0)
+    // barcode mode: a code at x 60-80 %, y 50-80 % of the frame must be outlined (green) exactly there
+    let lensView = PreviewView(session: nil, frameSize: CGSize(width: 1920, height: 1080), boxes: [], lensActive: true,
+                               lensQuads: [[CGPoint(x: 0.6, y: 0.5), CGPoint(x: 0.8, y: 0.5), CGPoint(x: 0.8, y: 0.8), CGPoint(x: 0.6, y: 0.8)]])
+    lensView.apply(to: v)
+    v.layout()
+    var g = (x0: Int.max, y0: Int.max, x1: -1, y1: -1)
+    if let rep2 = v.bitmapImageRepForCachingDisplay(in: v.bounds) {
+        v.cacheDisplay(in: v.bounds, to: rep2)
+        for y in 0..<rep2.pixelsHigh {
+            for x in 0..<rep2.pixelsWide {
+                guard let c = rep2.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                if c.greenComponent > 0.6 && c.redComponent < 0.45 && c.blueComponent < 0.5 { g = (min(g.x0, x), min(g.y0, y), max(g.x1, x), max(g.y1, y)) }
+            }
+        }
+    }
+    // view 1600x1000, video rect y 50...950 (900 high, 1600 wide): expected x 960...1280, y 500...770
+    let gs = (Double(g.x0) / scale, Double(g.y0) / scale, Double(g.x1) / scale, Double(g.y1) / scale)
+    print(String(format: "SELFTEST barcode outline x %.0f...%.0f y %.0f...%.0f   expected x 960...1280 y 500...770", gs.0, gs.2, gs.1, gs.3))
+    let lensOK = abs(gs.0 - 960) < 8 && abs(gs.2 - 1280) < 8 && abs(gs.1 - 500) < 8 && abs(gs.3 - 770) < 8
+    let ok = placed && counts == (2, 1, 0) && lensOK
     print(ok ? "SELFTEST OK" : "SELFTEST FAILED: overlay boxes are misplaced or the toggles do not work")
     if !ok { exit(1) }
 }
