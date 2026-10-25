@@ -1,7 +1,7 @@
-// UNCOMPILED SKETCH: written without a Mac. Expect small compile fixes.
+// Compiles on macOS 26 / Xcode 26; unit-tested on synthetic fixtures only (docs/results/phase1-vision-unit.md).
 // UNTESTED on dense racks. Foreground-instance masks find "salient objects", not products: expect merged touching
 // items and missed small ones; measure against BlobDetector in the Phase 1 detector bake-off.
-// Hypothesis: the label buffer is top-left origin and aligned with the input image (check on a real frame).
+// Label buffer: top-left origin, aligned with the input (confirmed on synthetic frames; check on a real frame too).
 import CoreVideo
 import Foundation
 import ShelfScan

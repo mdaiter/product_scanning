@@ -1,4 +1,4 @@
-// UNCOMPILED SKETCH: written without a Mac. Expect small compile fixes.
+// Compiles on macOS 26 / Xcode 26; unit-tested on synthetic fixtures only (docs/results/phase1-vision-unit.md).
 // OPEN QUESTION for the Phase 1 bake-off: Apple documents feature prints for `computeDistance(_:to:)`. Cosine on the raw
 // vector (what the Rust side does) is a hypothesis. If it ranks poorly, change the engine's similarity for this embedder
 // (ask Matt first: that touches the Embedder contract) or switch to a CoreML CLIP/DINO-class model.

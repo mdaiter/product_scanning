@@ -1,4 +1,4 @@
-// UNCOMPILED SKETCH: written without a Mac. Expect small compile fixes.
+// Compiles on macOS 26 / Xcode 26; unit-tested on synthetic fixtures only (docs/results/phase1-vision-unit.md).
 import CoreGraphics
 import Foundation
 import ShelfScan

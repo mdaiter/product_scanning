@@ -258,7 +258,11 @@ Detailed specs with work items and acceptance tests are in `docs/`. Hand-off ent
 | Rust test suite, clippy, Python smoke on a Mac | ran (macOS 26.3.1, M3 Pro, 2026-10-25) |
 | Anything on an iPhone or Android | **UNTESTED** |
 | Vision foreground-instance masks on dense racks | **UNTESTED** (Apple's page gives no instance limit) |
-| Swift sketches in `apple/` | compile for macOS (2026-10-25); **behaviour UNTESTED** |
+| Swift ↔ Rust round trip: Engine built in Swift, Swift `EventListener`, `ItemDiscovered` for 3 synthetic products | ran (`swift test`, macOS, 2026-10-25) |
+| Vision plugins (barcode, feature print, foreground masks) on **synthetic** fixtures: EAN-13 decode, 768-d unit vectors, mask top-left origin, padded BGRA frames | ran (`swift test`, macOS; `docs/results/phase1-vision-unit.md`) |
+| Vision plugins on real photos / webcam frames | **UNTESTED** (needs the 1.5 items) |
+| `ShelfScanCapture` (CameraSource, ScanModel, OverlayView) | compiles for macOS; **behaviour UNTESTED** |
+| Swift package for iOS | **UNTESTED** (iOS platform not installed in Xcode on the dev Mac) |
 | eBay / Google price-access claims | secondary sources, not the vendors' docs |
 | Open Food Facts / GS1 terms | read from their pages; legal review is yours |
 
