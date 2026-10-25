@@ -233,13 +233,15 @@ Detailed specs with work items and acceptance tests are in `docs/`. Hand-off ent
 
 | Item | Status |
 |---|---|
-| Rust 1.97 builds the workspace; crate versions in `Cargo.toml` | ran (Linux x86_64) |
-| Actor pipeline, state machine, roles, strategies, Store, publish chunking, flush barrier, credits, supervisor restarts | ran: 24 pipeline tests, 8 of 8 consecutive green runs |
+| Rust 1.97 builds the workspace; crate versions in `Cargo.toml` | ran (Linux x86_64); also Rust 1.91.1 on macOS 26.3.1 / M3 Pro (2026-10-25) |
+| Actor pipeline, state machine, roles, strategies, Store, publish chunking, flush barrier, credits, supervisor restarts | ran: 24 pipeline tests, 8 of 8 consecutive green runs (Linux); 4 of 4 on the Mac (2026-10-25) |
 | `ractor` mailboxes unbounded | observed (0.16.x) |
 | FTS5 + vector + RRF on bundled SQLite | ran (Store contract tests on memory and SQLite) |
 | `sqlite-vec` 0.1.9 | ran on Linux x86_64 only in an early probe; **not used by the code** (cosine in Rust) |
-| UniFFI Python bindings: foreign plugins, typed errors, async, built-ins passed from Python | ran (`scripts/python_smoke.sh`) |
-| UniFFI Swift bindings generation | ran (generation only); **swiftc compile UNVERIFIED** |
+| UniFFI Python bindings: foreign plugins, typed errors, async, built-ins passed from Python | ran (`scripts/python_smoke.sh`, Linux and Mac) |
+| UniFFI Swift bindings generation | ran |
+| `scripts/build_xcframework.sh` (aarch64-apple-ios, -ios-sim, -darwin) | ran (Mac, Xcode 26.0.1, 2026-10-25) |
+| `swift build` of the package (ShelfScan, ShelfScanVision, ShelfScanCapture) for macOS | ran (Mac, Swift 6.2 in Swift 5 mode) after renaming impl parameters to match trait labels |
 | `rxing` EAN-13/8, UPC-A/E decode of our own rendered barcodes | ran (encoder/decoder cross-check; real focused-item barcode confirm test) |
 | `rxing` quality on webcam / phone frames | **UNVERIFIED** |
 | CLI: synthetic, image folder, review loop | ran |
@@ -253,9 +255,10 @@ Detailed specs with work items and acceptance tests are in `docs/`. Hand-off ent
 | Anthropic Messages API request shape and forced tool call | mock only; **live UNVERIFIED** |
 | Open Food Facts response shape | mock only; **live UNVERIFIED** |
 | Video measurements in section 8 | measured earlier (ORB / Laplacian) on one reel, no detector run |
-| Anything on a Mac, an iPhone, or Android | **UNTESTED** |
+| Rust test suite, clippy, Python smoke on a Mac | ran (macOS 26.3.1, M3 Pro, 2026-10-25) |
+| Anything on an iPhone or Android | **UNTESTED** |
 | Vision foreground-instance masks on dense racks | **UNTESTED** (Apple's page gives no instance limit) |
-| Swift sketches in `apple/` | **UNCOMPILED** |
+| Swift sketches in `apple/` | compile for macOS (2026-10-25); **behaviour UNTESTED** |
 | eBay / Google price-access claims | secondary sources, not the vendors' docs |
 | Open Food Facts / GS1 terms | read from their pages; legal review is yours |
 
