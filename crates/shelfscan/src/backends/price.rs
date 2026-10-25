@@ -19,7 +19,8 @@ impl StubPriceAdvisor {
 
 #[uniffi::export]
 impl PriceAdvisor for StubPriceAdvisor {
-    fn suggest(&self, req: PriceRequest) -> Result<PriceSuggestion> {
+    fn suggest(&self, request: PriceRequest) -> Result<PriceSuggestion> {
+        let req = request;
         Ok(PriceSuggestion {
             low: String::new(),
             median: String::new(),

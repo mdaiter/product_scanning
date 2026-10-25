@@ -39,8 +39,8 @@ fn clean(v: Option<&serde_json::Value>) -> Option<String> {
 
 #[uniffi::export]
 impl ProductLookup for OpenFoodFactsLookup {
-    fn lookup(&self, g: String) -> Result<Option<LookupResult>> {
-        let g = gtin::normalize(&g).ok_or_else(|| ShelfError::invalid("not a valid GTIN"))?;
+    fn lookup(&self, gtin: String) -> Result<Option<LookupResult>> {
+        let g = gtin::normalize(&gtin).ok_or_else(|| ShelfError::invalid("not a valid GTIN"))?;
         let url = format!("{}/api/v2/product/{}.json?fields=code,product_name,brands,categories", self.base, g);
         let resp = self.http.send("open-food-facts", &url, &[("User-Agent", &self.user_agent), ("Accept", "application/json")], None, |_| false)?;
         if resp.status == 404 {

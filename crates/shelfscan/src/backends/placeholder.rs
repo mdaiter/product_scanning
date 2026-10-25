@@ -21,7 +21,8 @@ impl PlaceholderGuesser {
 
 #[uniffi::export]
 impl ProductGuesser for PlaceholderGuesser {
-    fn guess(&self, req: GuessRequest) -> Result<ProductGuess> {
+    fn guess(&self, request: GuessRequest) -> Result<ProductGuess> {
+        let req = request;
         let color = req.dominant_colors.first().cloned();
         let candidates = NOUNS.iter().map(|n| match &color {
             Some(c) => format!("Unidentified {c} {n}"),

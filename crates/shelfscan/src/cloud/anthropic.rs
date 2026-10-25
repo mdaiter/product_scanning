@@ -165,7 +165,8 @@ impl AnthropicGuesser {
 
 #[uniffi::export]
 impl ProductGuesser for AnthropicGuesser {
-    fn guess(&self, req: GuessRequest) -> Result<ProductGuess> {
+    fn guess(&self, request: GuessRequest) -> Result<ProductGuess> {
+        let req = request;
         let mut content = vec![frame_block(&req.image)?];
         for f in req.extra_views.iter().take(3) {
             content.push(frame_block(f)?);
