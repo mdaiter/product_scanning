@@ -46,3 +46,19 @@ Format per entry: date, item, did, measured, blocked, next.
   Non-interactive scoring without labels fails with the list of unlabelled items (by design). Interactive labelling: not exercised (needs a TTY).
 * **Blocked:** real footage (1.5).
 * **Next:** 1.4 Mac demo app.
+
+## 2026-10-25 · 1.4 Mac demo app
+
+* **Did:** `apple/Examples/MacDemo` (SwiftPM executable; NSCameraUsageDescription embedded). Preview + overlay, item list with
+  confirm / reject / title / hide / focus, draft listings, CSV export (~/Documents/shelfscan/products.csv), stats strip
+  (frames, boxes, hidden, latency, hitches). Matt asked mid-way for the segmenter to be switchable and parameters tunable in the UI:
+  added a Settings tab (detector Blob / Vision, masks on/off, Vision min instance size, Blob work size + threshold, embedder,
+  barcode scanner, every EngineConfig knob), applied by rebuilding the engine, saved in UserDefaults. New Rust constructor
+  `BlobDetector::with_params` (mentioned to Matt). `--measure N` and `--overlay-test --selftest` modes.
+* **Measured:** `docs/results/phase1-live-latency.md`. p95 82 ms (Blob) to 122 ms (Vision + masks), 0 hitches, 0 drops.
+* **Bugs found live:** (1) overlay mirrored vertically (Matt's screenshot), fixed and covered by the self-test; (2) measure mode
+  hung when SwiftUI created no window at launch; launch logic moved to the app delegate.
+* **Open:** Vision foreground calls a person a product. Option: a Swift detector wrapper that labels people (Vision human
+  rectangles) so Track gives them the Background role; would need agreement since roles are the engine's call. Not done.
+  Real-object box check on screen still to do with the 1.5 items.
+* **Next:** remaining unblocked work: 1.9 design note (PROPOSE FIRST), 1.11 request-dump switch (code only, no live call).
